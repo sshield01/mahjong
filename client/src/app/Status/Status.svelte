@@ -7,6 +7,7 @@
   import CurrentWind from './CurrentWind.svelte';
   import CurrentVotes from './CurrentVotes.svelte';
   import Timer from './Timer.svelte';
+  import WildcardInfo from './WildcardInfo.svelte';
   import context from '../../game/context.js';
 
   const { socket, store } = context();
@@ -32,6 +33,7 @@
   {#if $store.wind}
     <CurrentWind wind={$store.wind} />
   {/if}
+  <WildcardInfo />
   <CurrentVotes />
 {:else}
   <PlayerList order={ORDER[$store.playerWind(socket.name)]} />
