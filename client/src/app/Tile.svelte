@@ -6,7 +6,13 @@
   const valueOrder = (a, b) => typeof a === 'number'
     ? a - b
     : VALUES.indexOf(a) - VALUES.indexOf(b);
-  const order = tiles => (a, b) => tiles[a] && tiles[b] ? suitOrder(tiles[a].suit, tiles[b].suit) || valueOrder(tiles[a].value, tiles[b].value) : 0;
+  const order = (tiles, wildcard) => (a, b) => {
+    if (!tiles[a] || !tiles[b]) return 0;
+    const aWild = wildcard && tiles[a].suit === wildcard.suit && tiles[a].value === wildcard.value;
+    const bWild = wildcard && tiles[b].suit === wildcard.suit && tiles[b].value === wildcard.value;
+    if (aWild !== bWild) return aWild ? -1 : 1;
+    return suitOrder(tiles[a].suit, tiles[b].suit) || valueOrder(tiles[a].value, tiles[b].value);
+  };
   
   const pct = (amt, rev) => `${rev ? 'max' : 'min'}(${amt}vw, ${amt}vh)`;
   const TILE_DEPTH = 1.75;
@@ -110,7 +116,7 @@
 <script>
   import { createEventDispatcher } from 'svelte';
   import context from '../game/context.js';
-  import { WINDS } from '../lib/schema.js';
+  import { WINDS, eq } from '../lib/schema.js';
   import images from './images.js';
 
   export let tile, index, clickable = false, selected = false;
@@ -133,6 +139,7 @@
   };
 
   $: myWind = $store && $store.playerWind(socket.name);
+  $: isWildcard = tile && $store && $store.wildcard && eq(tile, $store.wildcard);
 
   function calcPosition(store) {
     for (const [wall, i] of store.walls.map((wall, i) => [wall, i])) {
@@ -155,7 +162,7 @@
         const position = handPosition(wind);
         let i = HAND_SIZE + 1;
         if (index !== store.drawn) {
-          i = [...store[wind].up.filter(x => x !== store.drawn)].sort(order(store.tiles)).indexOf(index);
+          i = [...store[wind].up.filter(x => x !== store.drawn)].sort(order(store.tiles, store.wildcard)).indexOf(index);
         }
         const horizontal = i * TILE_WIDTH;
         position.push(`translateX(${i * 3}px)`);
@@ -169,7 +176,7 @@
       } else if ([].concat(...store[wind].down).includes(index)) {
         const position = handPosition(wind);
         let i = store[wind].down.findIndex(meld => meld.includes(index));
-        let j = [...store[wind].down[i]].sort(order(store.tiles)).indexOf(index);
+        let j = [...store[wind].down[i]].sort(order(store.tiles, store.wildcard)).indexOf(index);
         let k = 0;
         if (j === 3) {
           j = 1;
@@ -210,7 +217,7 @@
 </script>
 
 <div class="selection {selected ? 'selected' : ''}">
-  <div class="tile" style={position}>
+  <div class="tile {isWildcard ? 'wildcard' : ''}" style={position}>
     <div class="top {clickable ? 'clickable' : ''}" on:click={() => clickable && dispatch('click', { tile, index })} />
     <div class="bottom {clickable ? 'clickable' : ''}" on:click={() => clickable && dispatch('click', { tile, index })} />
     <div class="left {clickable ? 'clickable' : ''}" on:click={() => clickable && dispatch('click', { tile, index })} />
@@ -354,5 +361,12 @@
 
     border-bottom: min(0.5vw, 0.5vh) solid var(--color-side);
     background-color: var(--color-front);
+  }
+
+  .tile.wildcard {
+    --color-back: #ffd700;
+    --color-side: #daa520;
+    --color-front: #fffacd;
+    --color-front-front: #fffacd;
   }
 </style>
