@@ -6,6 +6,17 @@ const SUITS = ["Pin", "Sou", "Man"];
 
 const NEXT_WIND = { Ton: "Nan", Nan: "Shaa", Shaa: "Pei", Pei: "Ton" };
 const PREV_WIND = { Nan: "Ton", Shaa: "Nan", Pei: "Shaa", Ton: "Pei" };
+const NEXT_DRAGON = { Chun: "Hatsu", Hatsu: "Haku", Haku: "Chun" };
+
+function nextTileType(tile) {
+  if (typeof tile.value === "number") {
+    return { suit: tile.suit, value: tile.value === 9 ? 1 : tile.value + 1 };
+  }
+  if (tile.suit === "wind") {
+    return { suit: "wind", value: NEXT_WIND[tile.value] };
+  }
+  return { suit: "dragon", value: NEXT_DRAGON[tile.value] };
+}
 
 export function player(name) {
   return { name, up: [], down: [], discarded: [], ready: false };
@@ -73,34 +84,26 @@ function* walls(length) {
 const sum = (arr) => arr.reduce((a, b) => a + b);
 export const eq = (a, b) => a.suit === b.suit && a.value === b.value;
 
-function allPairs([...tiles]) {
-  while (tiles.length) {
-    const tile = tiles.pop();
-    const index = tiles.findIndex((other) => eq(tile, other));
+function allPairs([...tiles], wildcard) {
+  const isWild = (t) => wildcard && eq(t, wildcard);
+  let wilds = tiles.filter(isWild).length;
+  const normals = tiles.filter((t) => !isWild(t));
+  while (normals.length) {
+    const tile = normals.pop();
+    const index = normals.findIndex((other) => eq(tile, other));
     if (index === -1) {
-      return false;
+      if (wilds > 0) {
+        wilds--;
+      } else {
+        return false;
+      }
+    } else {
+      normals.splice(index, 1);
     }
-    tiles.splice(index, 1);
   }
-  return true;
+  return wilds % 2 === 0;
 }
 
-function thirteenOrphans([...tiles]) {
-  const expectation = [
-    ...SUITS.map((suit) => tile(suit, 1)),
-    ...SUITS.map((suit) => tile(suit, 9)),
-    ...WINDS.map((wind) => tile("wind", wind)),
-    ...DRAGONS.map((dragon) => tile("dragon", dragon)),
-  ];
-  for (const expected in expectation) {
-    const index = tiles.findIndex((tile) => eq(tile, expected));
-    if (index === -1) {
-      return false;
-    }
-    tiles.splice(index, 1);
-  }
-  return !!expectation.find((tile) => eq(tile, tiles[0]));
-}
 
 export default class Schema {
   static concealed(basis, player) {
@@ -111,6 +114,9 @@ export default class Schema {
         .map((player) => [...player.discarded, ...[].concat(...player.down)]);
       const position = schema.playerWind(player);
       const revealed = [...schema[position].up, ...[].concat(...down)];
+      if (schema.indicator !== undefined) {
+        revealed.push(schema.indicator);
+      }
 
       schema.tiles = schema.tiles.map((tile, i) =>
         revealed.includes(i) ? tile : null,
@@ -152,6 +158,8 @@ export default class Schema {
   }
 
   static winningHand(schema, player, eye = null) {
+    const isWild = (t) => schema.wildcard && eq(t, schema.wildcard);
+
     function allMeld(tiles) {
       function melds(a, b, c) {
         if (eq(a, b) && eq(b, c)) return true;
@@ -165,11 +173,27 @@ export default class Schema {
         return values[0] === values[1] - 1 && values[1] === values[2] - 1;
       }
 
+      function meldsWithWild(a, b, c) {
+        const wilds = [a, b, c].filter(isWild).length;
+        const normals = [a, b, c].filter((t) => !isWild(t));
+        if (wilds === 3 || wilds === 2) return true;
+        if (wilds === 1) {
+          const [x, y] = normals;
+          if (eq(x, y)) return true;
+          if (x.suit === y.suit && typeof x.value === "number") {
+            const diff = Math.abs(x.value - y.value);
+            if (diff === 1 || diff === 2) return true;
+          }
+          return false;
+        }
+        return melds(a, b, c);
+      }
+
       if (tiles.length === 0) return true;
       for (let i = 0; i < tiles.length - 2; ++i) {
         for (let j = i + 1; j < tiles.length - 1; ++j) {
           for (let k = j + 1; k < tiles.length; ++k) {
-            if (melds(tiles[i], tiles[j], tiles[k])) {
+            if (meldsWithWild(tiles[i], tiles[j], tiles[k])) {
               const rest = [...tiles];
               rest.splice(k, 1);
               rest.splice(j, 1);
@@ -187,37 +211,85 @@ export default class Schema {
     if (hand.length % 3 !== 2) return false;
 
     const tiles = hand.map((tile) => schema.tiles[tile]);
-    if (hand.length === 14) {
-      if (allPairs(tiles)) {
-        return true;
+
+    const downTiles = player.down.flat()
+      .filter((t) => typeof t === "number")
+      .map((t) => schema.tiles[t]);
+    const allTiles = [...tiles, ...downTiles];
+
+    function allSameKind() {
+      const suit = allTiles[0].suit;
+      return allTiles.every((t) => t.suit === suit);
+    }
+
+    if (allTiles.every((t) => t.suit === "wind")) return true;
+
+    if (allTiles.every((t) => typeof t.value === "number" && [2, 5, 8].includes(t.value))) return true;
+
+    function pongpong() {
+      const downValid = player.down.every((meld) => {
+        const meldTiles = meld.filter((t) => typeof t === "number").map((t) => schema.tiles[t]);
+        return meldTiles.length >= 3 && meldTiles.every((t) => eq(t, meldTiles[0]));
+      });
+      if (!downValid) return false;
+      const [...remaining] = tiles;
+      for (let i = 0; i < remaining.length; i++) {
+        const pair = remaining.filter((other) => eq(remaining[i], other));
+        if (pair.length === 2) {
+          const rest = remaining.filter((_, idx) => idx !== i && !eq(remaining[idx], remaining[i]) || false);
+          const withoutPair = [...remaining];
+          withoutPair.splice(withoutPair.indexOf(pair[0]), 1);
+          withoutPair.splice(withoutPair.indexOf(pair[1]), 1);
+          const allTriplets = withoutPair.length % 3 === 0 && (function check(t) {
+            if (t.length === 0) return true;
+            const first = t[0];
+            const matches = t.filter((x) => eq(x, first));
+            if (matches.length < 3) return false;
+            const next = [...t];
+            for (let m = 0; m < 3; m++) next.splice(next.findIndex((x) => eq(x, first)), 1);
+            return check(next);
+          })(withoutPair);
+          if (allTriplets) return true;
+        }
       }
-      if (thirteenOrphans(tiles)) {
+      return false;
+    }
+
+    if (pongpong()) return true;
+
+    if (hand.length === 14) {
+      if (allPairs(tiles, schema.wildcard)) {
         return true;
       }
     }
 
+    function validEye(tile) {
+      if (isWild(tile)) return true;
+      if (allSameKind()) return typeof tile.value === "number";
+      return typeof tile.value === "number" && [2, 5, 8].includes(tile.value);
+    }
+
     if (eye) {
-      const matching = tiles.filter((other) => eq(schema.tiles[eye], other));
+      const eyeTile = schema.tiles[eye];
+      if (!validEye(eyeTile)) return false;
+      const matching = tiles.filter((other) => eq(eyeTile, other) || isWild(other));
       if (matching.length < 2) return false;
-      // Remove this pair from the hand
       const remaining = [...tiles];
       remaining.splice(remaining.indexOf(matching[0]), 1);
       remaining.splice(remaining.indexOf(matching[1]), 1);
-      // Then check if the rest of the meld nicely.
       if (allMeld(remaining)) return true;
     } else {
-      return tiles.some((tile, i) => {
-        const matching = tiles.slice(i + 1).filter((other) => eq(tile, other));
-        if (matching.length === 1) {
-          // Remove this pair from the hand
+      for (let i = 0; i < tiles.length; i++) {
+        if (!validEye(tiles[i])) continue;
+        for (let j = i + 1; j < tiles.length; j++) {
+          if (!eq(tiles[i], tiles[j]) && !isWild(tiles[i]) && !isWild(tiles[j])) continue;
           const remaining = [...tiles];
+          remaining.splice(j, 1);
           remaining.splice(i, 1);
-          remaining.splice(remaining.indexOf(matching[0]), 1);
-          // Then check if the rest of the meld nicely.
           if (allMeld(remaining)) return true;
         }
-        return false;
-      });
+      }
+      return false;
     }
   }
 
@@ -240,6 +312,8 @@ export default class Schema {
 
     this.tiles = basis.tiles || shuffle([...tiles()]);
     this.walls = basis.walls || [...walls(this.tiles.length)];
+    this.indicator = basis.indicator;
+    this.wildcard = basis.wildcard;
   }
 
   hasSpace() {
@@ -307,6 +381,10 @@ export default class Schema {
     this.drawn = draw;
     this.source = "front";
     this[winds[0]].up.push(draw);
+
+    const [indWall, indStack] = this.reverseDraw();
+    this.indicator = this.walls[indWall][indStack].pop();
+    this.wildcard = nextTileType(this.tiles[this.indicator]);
   }
 
   addPlayer(name) {
@@ -367,6 +445,9 @@ export default class Schema {
     if (position === this.previousTurn) {
       throw new Error("You may not pick up your own discard.");
     }
+    if (this.wildcard && eq(this.tiles[this.discarded], this.wildcard)) {
+      throw new Error("Wildcard tiles cannot be used in pong.");
+    }
     const hand = this[position].up;
     const discard = this.tiles[this.discarded];
 
@@ -392,6 +473,9 @@ export default class Schema {
   exposedKong(position) {
     if (position === this.previousTurn) {
       throw new Error("You may not pick up your own discard.");
+    }
+    if (this.wildcard && eq(this.tiles[this.discarded], this.wildcard)) {
+      throw new Error("Wildcard tiles cannot be used in kong.");
     }
     const hand = this[position].up;
     const discard = this.tiles[this.discarded];
@@ -431,6 +515,9 @@ export default class Schema {
       throw new Error("It is not your turn.");
     }
     const tileInfo = this.tiles[tile];
+    if (this.wildcard && eq(tileInfo, this.wildcard)) {
+      throw new Error("Wildcard tiles cannot be used in kong.");
+    }
     const matching = this[position].up.filter((tile) =>
       eq(this.tiles[tile], tileInfo),
     );
@@ -460,6 +547,9 @@ export default class Schema {
     }
 
     const tileInfo = this.tiles[tile];
+    if (this.wildcard && eq(tileInfo, this.wildcard)) {
+      throw new Error("Wildcard tiles cannot be used in kong.");
+    }
     const matching = this[position].down.findIndex((meld) => {
       if (meld.length !== 3) {
         return false;
@@ -497,6 +587,9 @@ export default class Schema {
     if (position === this.previousTurn) {
       throw new Error("You may not pick up your own discard.");
     }
+    if (this.wildcard && eq(this.tiles[this.discarded], this.wildcard)) {
+      throw new Error("Wildcard tiles cannot be used in chow.");
+    }
 
     if (matching.length !== 2) {
       throw new Error("You must choose two tiles to chow with.");
@@ -505,6 +598,9 @@ export default class Schema {
     for (const tile of matching) {
       if (!hand.includes(tile)) {
         throw new Error("You do not own these tiles.");
+      }
+      if (this.wildcard && eq(this.tiles[tile], this.wildcard)) {
+        throw new Error("Wildcard tiles cannot be used in chow.");
       }
       hand.splice(hand.indexOf(tile), 1);
     }
@@ -530,9 +626,14 @@ export default class Schema {
       throw new Error("You may not pick up eyes if it does not win the game.");
     }
     const tile = this.discarded;
-    const i = this[position].up.findIndex((tile) =>
+    let i = this[position].up.findIndex((tile) =>
       eq(this.tiles[tile], discard),
     );
+    if (i === -1 && this.wildcard) {
+      i = this[position].up.findIndex((tile) =>
+        eq(this.tiles[tile], this.wildcard),
+      );
+    }
     const [leftEye] = this[position].up.splice(i, 1);
 
     this[this.previousTurn].discarded.pop();
@@ -547,7 +648,9 @@ export default class Schema {
       // stealing someone's kong to win is worth points, so we have to watch for it specifically
       this.source = "kong";
     }
-    return new Message("win", { position, eyes, reveal: this.tiles, kong });
+    const allClear = false;
+    const allFromOthers = this[position].down.length === 3;
+    return new Message("win", { position, eyes, reveal: this.tiles, kong, allClear, allFromOthers });
   }
 
   win(player, kong = false) {
@@ -560,16 +663,20 @@ export default class Schema {
     }
     this.completed = true;
     if (kong) {
-      // stealing someone's kong to win is worth points, so we have to watch for it specifically
       this.source = "kong";
     }
-    return new Message("win", { position, reveal: this.tiles, kong });
+    const allClear = this[position].down.length === 0;
+    const allFromOthers = false;
+    return new Message("win", { position, reveal: this.tiles, kong, allClear, allFromOthers });
   }
 
   discard(name, tile) {
     const position = this.playerWind(name);
     if (position !== this.turn || this.discarded !== undefined) {
       throw new Error(`It is not ${name}'s turn to discard.`);
+    }
+    if (this.wildcard && eq(this.tiles[tile], this.wildcard)) {
+      throw new Error("Wildcard tiles cannot be discarded.");
     }
     const tileIndex = this[position].up.indexOf(tile);
     if (tileIndex === -1) {
