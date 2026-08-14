@@ -1,7 +1,7 @@
 <script>
   import { get } from 'svelte/store';
   import Tile from './Tile.svelte';
-  import Schema from '../lib/schema.js';
+  import Schema, { eq } from '../lib/schema.js';
   import context from '../game/context.js';
 
   export let tableAngle;
@@ -37,7 +37,7 @@
   let exactMatches = [];
   $: {
     const storeValue = $store;
-    if (discarded) {
+    if (discarded && !(storeValue.wildcard && eq(discarded, storeValue.wildcard))) {
       exactMatches = storeValue[myWind].up.filter(tile => storeValue.tiles[tile].suit === discarded.suit && storeValue.tiles[tile].value === discarded.value);
     } else {
       exactMatches = [];
@@ -62,9 +62,10 @@
   let canChow = [];
   $: {
     const storeValue = $store;
-    if (discarded) {
+    const isWild = (t) => storeValue.wildcard && eq(t, storeValue.wildcard);
+    if (discarded && !isWild(discarded)) {
       if (typeof discarded.value === 'number') {
-        const ofSuit = storeValue[myWind].up.filter(tile => storeValue.tiles[tile].suit === discarded.suit);
+        const ofSuit = storeValue[myWind].up.filter(tile => storeValue.tiles[tile].suit === discarded.suit && !isWild(storeValue.tiles[tile]));
         const required = [
           ofSuit.find(tile => storeValue.tiles[tile].value === discarded.value - 2),
           ofSuit.find(tile => storeValue.tiles[tile].value === discarded.value - 1),
@@ -163,8 +164,10 @@
       }
 
       if (canWin) {
+        const eyeTile = exactMatches[0] !== undefined ? exactMatches[0]
+          : storeValue[myWind].up.find(tile => storeValue.wildcard && eq(storeValue.tiles[tile], storeValue.wildcard));
         list.push({
-          tiles: [exactMatches[0]],
+          tiles: eyeTile !== undefined ? [eyeTile] : [],
           label: 'Win',
           async handler() {
             try {
@@ -211,7 +214,7 @@
         handlers = storeValue.tiles.map((tile, index) => {
           if (myTurn) {
             if (typeof storeValue.drawn === 'number') {
-              if (storeValue[storeValue.turn].up.includes(index)) {
+              if (storeValue[storeValue.turn].up.includes(index) && !(storeValue.wildcard && eq(storeValue.tiles[index], storeValue.wildcard))) {
                 return async () => {
                   try {
                     await socket.send('discard', { tile: index });
