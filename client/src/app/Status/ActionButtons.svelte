@@ -21,8 +21,10 @@
     });
 
   $: myWind = $store && $store.playerWind(socket.name);
+  $: isWild = (t) => $store.wildcard && eq(t, $store.wildcard);
   $: concealedKongs = $store[myWind].up
     .filter((tile, i, tiles) =>
+      !isWild($store.tiles[tile]) &&
       tiles
         .slice(i + 1)
         .map(tile => $store.tiles[tile])
@@ -31,6 +33,7 @@
     );
   $: exposedKongs = $store[myWind].up
     .filter(tile =>
+      !isWild($store.tiles[tile]) &&
       $store[myWind].down
         .filter(meld => meld.length === 3)
         .some(meld => meld
