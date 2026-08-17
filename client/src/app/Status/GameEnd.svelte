@@ -130,59 +130,54 @@
   $: kongCount = winner.down.filter(meld => meld.length >= 5).length;
 
   $: scoreBreakdown = (() => {
+    const WINDS = ['Ton', 'Shaa', 'Pei', 'Nan'];
+
+    function calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount) {
+      let score = 1;
+      if (isLoserDealer) score *= 2;
+      if (isLoserDiscarder) score *= 2;
+      if (isPongpong) score += 5;
+      if (isAllClear) score += 5;
+      if (isAllFromOthers) score += 5;
+      if (isAllPairs) score += 10;
+      if (isAllJiang) score += 10;
+      if (isAllWinds) score += 10;
+      if (isAllSameKind) score += 10;
+      if (hasNoWildcard) score *= 2;
+      for (let i = 0; i < kongCount + loserKongCount; i++) score *= 2;
+      return score;
+    }
+
     const lines = [];
-    let score = 1;
     lines.push({ label: '胡', value: '1' });
+    if (isPongpong) lines.push({ label: '碰碰胡', value: '+5' });
+    if (isAllClear) lines.push({ label: '门清', value: '+5' });
+    if (isAllFromOthers) lines.push({ label: '全求人', value: '+5' });
+    if (isAllPairs) lines.push({ label: '七对', value: '+10' });
+    if (isAllJiang) lines.push({ label: '全将', value: '+10' });
+    if (isAllWinds) lines.push({ label: '全风', value: '+10' });
+    if (isAllSameKind) lines.push({ label: '清一色', value: '+10' });
+    for (let i = 0; i < kongCount; i++) lines.push({ label: '杠', value: 'x2' });
 
-    if (isDealer) {
-      score *= 2;
-      lines.push({ label: '庄家', value: 'x2' });
+    const losers = [];
+    let winnerTotal = 0;
+    for (const wind of WINDS) {
+      if ($store[wind] && wind !== $store.turn) {
+        const isLoserDealer = wind === 'Ton';
+        const isLoserDiscarder = !isSelfDraw && wind === $store.previousTurn;
+        const loserKongCount = $store[wind].down.filter(meld => meld.length >= 5).length;
+        const payment = Math.min(30, calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount));
+        const reasons = [];
+        if (isLoserDealer) reasons.push('庄家');
+        if (isLoserDiscarder) reasons.push('放炮');
+        if (loserKongCount > 0) reasons.push(`杠x${loserKongCount}`);
+        losers.push({ name: $store[wind].name, payment, reasons });
+        winnerTotal += payment;
+      }
     }
-    if (isSelfDraw) {
-      score *= 2;
-      lines.push({ label: '自摸', value: 'x2' });
-    }
+    if (hasNoWildcard) lines.push({ label: '无癞子', value: 'x2' });
 
-    if (isPongpong) {
-      score += 5;
-      lines.push({ label: '碰碰胡', value: '+5' });
-    }
-    if (isAllClear) {
-      score += 5;
-      lines.push({ label: '门清', value: '+5' });
-    }
-    if (isAllFromOthers) {
-      score += 5;
-      lines.push({ label: '全求人', value: '+5' });
-    }
-
-    if (isAllPairs) {
-      score += 10;
-      lines.push({ label: '七对', value: '+10' });
-    }
-    if (isAllJiang) {
-      score += 10;
-      lines.push({ label: '全将', value: '+10' });
-    }
-    if (isAllWinds) {
-      score += 10;
-      lines.push({ label: '全风', value: '+10' });
-    }
-    if (isAllSameKind) {
-      score += 10;
-      lines.push({ label: '清一色', value: '+10' });
-    }
-
-    if (hasNoWildcard) {
-      score *= 2;
-      lines.push({ label: '无癞子', value: 'x2' });
-    }
-    for (let i = 0; i < kongCount; i++) {
-      score *= 2;
-      lines.push({ label: '杠', value: 'x2' });
-    }
-
-    return { lines, score };
+    return { lines, losers, winnerTotal };
   })();
 
   async function playAgain() {
@@ -198,8 +193,31 @@
     {#each scoreBreakdown.lines as { label, value }}
       <div class="rule">{label}: {value}</div>
     {/each}
-    <div class="total">合计: {scoreBreakdown.score} 分</div>
+    <div class="round-results">
+      <div class="result-row">
+        <span>{winner.name}</span>
+        <span class="positive">+{scoreBreakdown.winnerTotal}</span>
+      </div>
+      {#each scoreBreakdown.losers as loser}
+        <div class="result-row">
+          <span>{loser.name}{loser.reasons.length ? ' (' + loser.reasons.join(', ') + ')' : ''}</span>
+          <span class="negative">-{loser.payment}</span>
+        </div>
+      {/each}
+    </div>
   </div>
+
+  {#if $store.scores && Object.keys($store.scores).length > 0}
+    <div class="cumulative">
+      <div class="cumulative-title">累计积分</div>
+      {#each Object.entries($store.scores).sort((a, b) => b[1] - a[1]) as [name, score]}
+        <div class="cumulative-row">
+          <span class="player-name">{name}</span>
+          <span class="player-score" class:positive={score > 0} class:negative={score < 0}>{score > 0 ? '+' : ''}{score}</span>
+        </div>
+      {/each}
+    </div>
+  {/if}
 
   <button
     class="play-again"
@@ -243,12 +261,55 @@
     margin: 8px 0;
   }
 
-  .total {
-    margin-top: 16px;
+  .round-results {
+    margin-top: 12px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.3);
+    font-size: 18pt;
+  }
+
+  .result-row {
+    display: flex;
+    justify-content: space-between;
+    margin: 6px 0;
+    min-width: 250px;
+  }
+
+  .positive {
+    color: #4caf50;
+  }
+
+  .negative {
+    color: #f44336;
+  }
+
+  .cumulative {
+    margin: 20px;
     padding-top: 12px;
-    border-top: 1px solid rgba(255, 255, 255, 0.5);
+    border-top: 1px solid rgba(255, 255, 255, 0.3);
+    font-family: var(--font-chinese);
+    font-size: 16pt;
+  }
+
+  .cumulative-title {
     font-weight: bold;
-    font-size: 24pt;
+    margin-bottom: 8px;
+    font-size: 18pt;
+  }
+
+  .cumulative-row {
+    display: flex;
+    justify-content: space-between;
+    margin: 4px 0;
+    min-width: 200px;
+  }
+
+  .player-score.positive {
+    color: #4caf50;
+  }
+
+  .player-score.negative {
+    color: #f44336;
   }
 
   .play-again {
