@@ -99,7 +99,7 @@
         ]);
         list.push({
           tiles: exactMatches,
-          label: 'Kong',
+          label: '杠',
           async handler() {
             try {
               await socket.send('kong', { mode: 'exposed' });
@@ -115,7 +115,7 @@
       for (const tiles of pongs) {
         list.push({
           tiles,
-          label: 'Pong',
+          label: '碰',
           async handler() {
             try {
               await socket.send('pong');
@@ -133,7 +133,7 @@
         if (Schema.winningHand(storeValue, player)) {
           list.push({
             tiles,
-            label: 'Win',
+            label: '胡',
             async handler() {
               try {
                 await socket.send('win', { method: 'Pong' });
@@ -150,7 +150,7 @@
       if (myTurn) {
         list.push(...canChow.map(tiles => ({
           tiles,
-          label: 'Chow',
+          label: '吃',
           async handler() {
             try {
               await socket.send('chow', { tiles });
@@ -168,7 +168,7 @@
           : storeValue[myWind].up.find(tile => storeValue.wildcard && eq(storeValue.tiles[tile], storeValue.wildcard));
         list.push({
           tiles: eyeTile !== undefined ? [eyeTile] : [],
-          label: 'Win',
+          label: '胡',
           async handler() {
             try {
               await socket.send('win', { method: 'Eyes' });
@@ -189,7 +189,7 @@
       }
       list.push(...canChow.filter(willWin).map(tiles => ({
         tiles,
-        label: 'Win',
+        label: '胡',
         async handler() {
           try {
             await socket.send('win', { method: 'Chow', tiles });
