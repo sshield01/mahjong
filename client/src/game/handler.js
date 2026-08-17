@@ -141,10 +141,11 @@ export default async function handler(
         selectionSets.set([]);
         selection.set(new Set());
         timer.set(null);
-        const { position, eyes, reveal, kong } = message.body;
+        const { position, eyes, reveal, kong, scores } = message.body;
         schema.turn = position;
         schema.tiles = reveal;
         schema.completed = true;
+        if (scores) schema.scores = scores;
         if (eyes !== undefined) {
           for (const tile of eyes) {
             const index = schema[position].up.indexOf(tile);
