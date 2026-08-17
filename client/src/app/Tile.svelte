@@ -15,12 +15,13 @@
   };
   
   const pct = (amt, rev) => `${rev ? 'max' : 'min'}(${amt}vw, ${amt}vh)`;
-  const TILE_DEPTH = 1.75;
-  const TILE_WIDTH = 3;
-  const TILE_HEIGHT = 4;
+  const TILE_DEPTH = 2.3;
+  const TILE_WIDTH = 4;
+  const TILE_HEIGHT = 5.3;
+  const WALL_TILE_WIDTH = 3;
 
   const STACKS_PER_WALL = 17;
-  const STACKS_WIDTH = STACKS_PER_WALL * TILE_WIDTH;
+  const STACKS_WIDTH = STACKS_PER_WALL * WALL_TILE_WIDTH;
 
   const WALL_INSET = pct(100 - STACKS_WIDTH / 8.0 * 3);
   const WALL_POSITION = [
@@ -54,7 +55,7 @@
 
   const HAND_SIZE = 13;
   const HAND_WIDTH = HAND_SIZE * TILE_WIDTH;
-  const HAND_INSET = pct(100 - STACKS_WIDTH / 4);
+  const HAND_INSET = pct(100 - STACKS_WIDTH / 4 + TILE_HEIGHT);
 
   function handPosition(wind) {
     switch (wind) {
@@ -142,13 +143,40 @@
   $: isWildcard = tile && $store && $store.wildcard && eq(tile, $store.wildcard);
 
   function calcPosition(store) {
+    if (index === store.indicator) {
+      const rollSum = store.roll[0] + store.roll[1] + store.roll[2];
+      let w = 3 - ((rollSum + 2) % 4);
+      let s = rollSum;
+      for (;;) {
+        if (s >= store.walls[w].length) {
+          s %= store.walls[w].length;
+          w = (w + 1) % 4;
+        }
+        if (s < 0) {
+          w = (w + 3) % 4;
+          s = store.walls[w].length - 1;
+        }
+        if (store.walls[w][s].length !== 0) {
+          break;
+        }
+        s -= 1;
+      }
+      const position = [...WALL_POSITION[w]];
+      const depth = (store.walls[w][s].length + 0.5) * TILE_DEPTH;
+      const horizontal = (STACKS_PER_WALL - s - 1) * WALL_TILE_WIDTH;
+      position.push(`translateZ(${pct(depth)})`);
+      position.push(`translateX(${(STACKS_PER_WALL - s) * 3}px)`);
+      position.push(`translateX(${pct(horizontal)})`);
+      return `transform: ${position.join(' ')}`;
+    }
+
     for (const [wall, i] of store.walls.map((wall, i) => [wall, i])) {
       for (const [stack, j] of wall.map((stack, j) => [stack, j])) {
         const k = stack.indexOf(index);
         if (k === -1) continue;
         const position = [...WALL_POSITION[i]];
         const depth = k * TILE_DEPTH;
-        const horizontal = (STACKS_PER_WALL - j - 1) * TILE_WIDTH;
+        const horizontal = (STACKS_PER_WALL - j - 1) * WALL_TILE_WIDTH;
         position.push(`translateZ(${pct(depth)})`);
         position.push(`translateX(${(STACKS_PER_WALL - j) * 3}px)`)
         position.push(`translateX(${pct(horizontal)})`);
@@ -232,13 +260,13 @@
 <style>
   .tile {
     position: absolute;
-    left: max(-1.5vw, -1.5vh);
-    top: max(-2vw, -2vh);
-    width: min(3vw, 3vh);
-    height: min(4vw, 4vh);
+    left: max(-2vw, -2vh);
+    top: max(-2.65vw, -2.65vh);
+    width: min(4vw, 4vh);
+    height: min(5.3vw, 5.3vh);
 
     transform-style: preserve-3d;
-    transform-origin: 50% 50% min(0.875vw, 0.875vh);
+    transform-origin: 50% 50% min(1.15vw, 1.15vh);
     transition: transform 1s;
     will-change: transform;
     pointer-events: none;
@@ -263,7 +291,7 @@
   }
 
   .selection.selected {
-    transform: translateZ(max(1vw, 1vh));
+    transform: translateZ(max(1.3vw, 1.3vh));
   }
 
   .front, .back, .left, .right, .top, .bottom {
@@ -298,24 +326,24 @@
   .front, .back {
     top: 0;
     left: 0;
-    width: min(3vw, 3vh);
-    height: min(4vw, 4vh);
+    width: min(4vw, 4vh);
+    height: min(5.3vw, 5.3vh);
   }
 
   .left, .right {
-    width: min(1.25vw, 1.25vh);
-    height: min(4vw, 4vh);
+    width: min(1.65vw, 1.65vh);
+    height: min(5.3vw, 5.3vh);
   }
 
   .top, .bottom {
-    width: min(3vw, 3vh);
-    height: min(1.25vw, 1.25vh);
+    width: min(4vw, 4vh);
+    height: min(1.65vw, 1.65vh);
   }
 
   .front {
     box-sizing: border-box;
     padding: 5%;
-    transform: translateZ(min(1.75vw, 1.75vh)) translateZ(-1px);
+    transform: translateZ(min(2.3vw, 2.3vh)) translateZ(-1px);
     background-color: var(--color-front-front);
   }
 
