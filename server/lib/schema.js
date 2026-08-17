@@ -129,6 +129,7 @@ export default class Schema {
     const basis = {
       name: previous.name,
       wind: previous.wind,
+      scores: previous.scores || {},
     };
     if (previous.completed && previous.turn === "Ton") {
       for (const position of WINDS) {
@@ -314,6 +315,7 @@ export default class Schema {
     this.walls = basis.walls || [...walls(this.tiles.length)];
     this.indicator = basis.indicator;
     this.wildcard = basis.wildcard;
+    this.scores = basis.scores || {};
   }
 
   hasSpace() {
@@ -650,7 +652,120 @@ export default class Schema {
     }
     const allClear = false;
     const allFromOthers = this[position].down.length === 3;
-    return new Message("win", { position, eyes, reveal: this.tiles, kong, allClear, allFromOthers });
+    this.updateScores(position);
+    return new Message("win", { position, eyes, reveal: this.tiles, kong, allClear, allFromOthers, scores: this.scores });
+  }
+
+  computeRoundScore(position) {
+    const winner = this[position];
+    const allTiles = [...winner.up, ...winner.down.flat()]
+      .filter((t) => typeof t === "number")
+      .map((t) => this.tiles[t]);
+
+    const isDealer = position === "Ton";
+    const isSelfDraw = this.source === "front" || this.source === "back";
+
+    const isPongpong = (() => {
+      const downValid = winner.down.every((meld) => {
+        const meldTiles = meld
+          .filter((t) => typeof t === "number")
+          .map((t) => this.tiles[t]);
+        return meldTiles.length >= 3 && meldTiles.every((t) => eq(t, meldTiles[0]));
+      });
+      if (!downValid) return false;
+      const handTiles = winner.up.map((t) => this.tiles[t]);
+      const isW = (t) => this.wildcard && eq(t, this.wildcard);
+      const nonWild = handTiles.filter((t) => !isW(t));
+      const wilds = handTiles.length - nonWild.length;
+      for (let i = 0; i < nonWild.length; i++) {
+        const pair = nonWild.filter((other) => eq(nonWild[i], other));
+        if (pair.length >= 2) {
+          const withoutPair = [...nonWild];
+          withoutPair.splice(withoutPair.indexOf(pair[0]), 1);
+          withoutPair.splice(withoutPair.indexOf(pair[1]), 1);
+          let triplets = [...withoutPair];
+          let w = wilds;
+          let valid = triplets.length % 3 === 0;
+          if (valid) {
+            while (triplets.length > 0) {
+              const f = triplets[0];
+              const cnt = triplets.filter((t) => eq(t, f)).length;
+              if (cnt >= 3) {
+                let r = 0;
+                triplets = triplets.filter((t) => !(eq(t, f) && ++r <= 3));
+              } else if (cnt + w >= 3) {
+                w -= 3 - cnt;
+                triplets = triplets.filter((t) => !eq(t, f));
+              } else {
+                valid = false;
+                break;
+              }
+            }
+          }
+          if (valid) return true;
+        }
+      }
+      return false;
+    })();
+
+    const isAllClear = winner.down.length === 0 && isSelfDraw;
+    const isAllFromOthers = !isSelfDraw && winner.down.length >= 3;
+    const isAllPairs =
+      winner.up.length === 14 &&
+      allPairs(
+        winner.up.map((t) => this.tiles[t]),
+        this.wildcard,
+      );
+    const isAllJiang = allTiles.every(
+      (t) => typeof t.value === "number" && [2, 5, 8].includes(t.value),
+    );
+    const isAllWinds = allTiles.every((t) => t.suit === "wind");
+    const isAllSameKind = (() => {
+      const suit = allTiles[0] && allTiles[0].suit;
+      return allTiles.every((t) => t.suit === suit);
+    })();
+    const hasNoWildcard =
+      !this.wildcard || !allTiles.some((t) => eq(t, this.wildcard));
+    const kongCount = winner.down.filter((meld) => meld.length >= 5).length;
+
+    function calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount) {
+      let score = 1;
+      if (isLoserDealer) score *= 2;
+      if (isLoserDiscarder) score *= 2;
+      if (isPongpong) score += 5;
+      if (isAllClear) score += 5;
+      if (isAllFromOthers) score += 5;
+      if (isAllPairs) score += 10;
+      if (isAllJiang) score += 10;
+      if (isAllWinds) score += 10;
+      if (isAllSameKind) score += 10;
+      if (hasNoWildcard) score *= 2;
+      for (let i = 0; i < kongCount + loserKongCount; i++) score *= 2;
+      return score;
+    }
+
+    return { isSelfDraw, calcLoserScore };
+  }
+
+  updateScores(position) {
+    const { isSelfDraw, calcLoserScore } = this.computeRoundScore(position);
+    const winnerName = this[position].name;
+    if (!this.scores[winnerName]) this.scores[winnerName] = 0;
+
+    let winnerTotal = 0;
+    for (const wind of WINDS) {
+      if (this[wind] && wind !== position) {
+        const isLoserDealer = wind === "Ton";
+        const isLoserDiscarder = !isSelfDraw && wind === this.previousTurn;
+        const loserKongCount = this[wind].down.filter((meld) => meld.length >= 5).length;
+        const payment = Math.min(30, calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount));
+        const name = this[wind].name;
+        if (!this.scores[name]) this.scores[name] = 0;
+        this.scores[name] -= payment;
+        winnerTotal += payment;
+      }
+    }
+    this.scores[winnerName] += winnerTotal;
   }
 
   win(player, kong = false) {
@@ -667,7 +782,8 @@ export default class Schema {
     }
     const allClear = this[position].down.length === 0;
     const allFromOthers = false;
-    return new Message("win", { position, reveal: this.tiles, kong, allClear, allFromOthers });
+    this.updateScores(position);
+    return new Message("win", { position, reveal: this.tiles, kong, allClear, allFromOthers, scores: this.scores });
   }
 
   discard(name, tile) {
