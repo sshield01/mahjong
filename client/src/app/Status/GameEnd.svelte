@@ -133,9 +133,10 @@
     const WINDS = ['Ton', 'Shaa', 'Pei', 'Nan'];
 
     function calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount) {
-      let score = 1;
-      if (isLoserDealer) score *= 2;
-      if (isLoserDiscarder) score *= 2;
+      let base = 1;
+      if (isLoserDealer || isDealer) base *= 2;
+      if (isLoserDiscarder) base *= 2;
+      let score = base;
       if (isPongpong) score += 5;
       if (isAllClear) score += 5;
       if (isAllFromOthers) score += 5;
@@ -164,12 +165,12 @@
     for (const wind of WINDS) {
       if ($store[wind] && wind !== $store.turn) {
         const isLoserDealer = wind === 'Ton';
-        const isLoserDiscarder = !isSelfDraw && wind === $store.previousTurn;
+        const isLoserDiscarder = isSelfDraw || wind === $store.previousTurn;
         const loserKongCount = $store[wind].down.filter(meld => meld.length >= 5).length;
         const payment = Math.min(30, calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount));
         const reasons = [];
         if (isLoserDealer) reasons.push('庄家');
-        if (isLoserDiscarder) reasons.push('放炮');
+        if (isLoserDiscarder) reasons.push(isSelfDraw ? '自摸' : '放炮');
         if (loserKongCount > 0) reasons.push(`杠x${loserKongCount}`);
         losers.push({ name: $store[wind].name, payment, reasons });
         winnerTotal += payment;
