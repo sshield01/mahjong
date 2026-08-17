@@ -1,354 +1,210 @@
 <script>
   import context from '../../game/context';
-  import Schema from '../../lib/schema';
+  import Schema, { eq } from '../../lib/schema';
 
   const { store, socket } = context();
 
   $: winner = $store[$store.turn];
-  $: winningHand = [...winner.up, ...winner.down.flat()]
+  $: allTiles = [...winner.up, ...winner.down.flat()]
     .filter(tile => typeof tile === 'number')
     .map(tile => $store.tiles[tile]);
-  $: winningSuits = new Set(winningHand.map(tile => tile.suit));
 
-  const eq = ({ ...lhs }, { ...rhs }, ctx = {}) => {
-    if (typeof lhs.suit === 'symbol') {
-      if (!ctx[lhs.suit]) ctx[lhs.suit] = rhs.suit;
-      lhs.suit = ctx[lhs.suit];
-    } else if (typeof lhs.suit === 'undefined') {
-      delete rhs.suit;
-    }
-    if (typeof lhs.value === 'symbol') {
-      if (!ctx[lhs.value]) ctx[lhs.value] = rhs.value;
-      lhs.value = ctx[lhs.value];
-    } else if (typeof lhs.value === 'undefined') {
-      delete rhs.value;
-    }
-    return lhs.suit === rhs.suit && lhs.value === rhs.value;
-  };
+  $: isDealer = $store.turn === 'Ton';
+  $: isSelfDraw = $store.source === 'front' || $store.source === 'back';
 
-  $: includes = (tiles, hand = [...winningHand], context = {}) => {
-    if (tiles.length === 0) return true;
-    const [tile, ...rest] = tiles;
-    return hand.some((t, i) => {
-      const ctx = { ...context };
-      if (eq(tile, t, ctx)) {
-        if (includes(rest, [...hand.slice(0, i), ...hand.slice(i + 1)], ctx)) {
-          return true;
+  $: isPongpong = (() => {
+    const downValid = winner.down.every(meld => {
+      const meldTiles = meld.filter(t => typeof t === 'number').map(t => $store.tiles[t]);
+      return meldTiles.length >= 3 && meldTiles.every(t => eq(t, meldTiles[0]));
+    });
+    if (!downValid) return false;
+    const handTiles = winner.up.map(t => $store.tiles[t]);
+    const nonWild = handTiles.filter(t => !($store.wildcard && eq(t, $store.wildcard)));
+    const wilds = handTiles.length - nonWild.length;
+    let remaining = [...nonWild];
+    let usedWilds = 0;
+    // remove one pair
+    for (let i = 0; i < remaining.length; i++) {
+      const match = remaining.slice(i + 1).findIndex(t => eq(t, remaining[i]));
+      if (match !== -1) {
+        const rest = [...remaining];
+        rest.splice(i + 1 + match, 1);
+        rest.splice(i, 1);
+        // check all triplets in rest
+        let check = [...rest];
+        let ok = true;
+        let w = wilds;
+        while (check.length > 0) {
+          const first = check[0];
+          const matches = check.filter(t => eq(t, first)).length;
+          if (matches >= 3) {
+            check = check.filter((t, idx) => { let c = 0; return !(eq(t, first) && ++c <= 3); });
+            // remove 3 of first
+            let removed = 0;
+            check = [...check]; // reset
+            check = rest.filter(() => true); // redo
+            // simpler approach
+            break;
+          }
+          ok = false;
+          break;
+        }
+        // simplified: just check if rest length is divisible by 3 and all triplets
+        if (rest.length % 3 === 0) {
+          let triplets = [...rest];
+          let valid = true;
+          let ww = wilds;
+          while (triplets.length > 0) {
+            const f = triplets[0];
+            const cnt = triplets.filter(t => eq(t, f)).length;
+            if (cnt >= 3) {
+              let r = 0;
+              triplets = triplets.filter(t => !(eq(t, f) && ++r <= 3));
+            } else if (cnt + ww >= 3) {
+              ww -= (3 - cnt);
+              triplets = triplets.filter(t => !eq(t, f));
+            } else {
+              valid = false;
+              break;
+            }
+          }
+          if (valid) return true;
         }
       }
-    });
-  }
+    }
+    // try with wildcard as pair partner
+    if (wilds >= 1 && nonWild.length % 3 === 0) {
+      let triplets = [...nonWild];
+      let valid = true;
+      let ww = wilds - 1;
+      while (triplets.length > 0) {
+        const f = triplets[0];
+        const cnt = triplets.filter(t => eq(t, f)).length;
+        if (cnt >= 3) {
+          let r = 0;
+          triplets = triplets.filter(t => !(eq(t, f) && ++r <= 3));
+        } else if (cnt + ww >= 3) {
+          ww -= (3 - cnt);
+          triplets = triplets.filter(t => !eq(t, f));
+        } else {
+          valid = false;
+          break;
+        }
+      }
+      if (valid) return true;
+    }
+    return false;
+  })();
 
-  const tiles = (suit, ...values) => values.map(value => ({ suit, value }));
-  const pong = (suit, value) => tiles(suit, value, value, value);
+  $: isAllClear = winner.down.length === 0 && isSelfDraw;
+  $: isAllFromOthers = !isSelfDraw && winner.down.length >= 3;
 
-  const ch = (i) => ['一', '二', '三', '四', '五', '六', '七', '八', '九'][i];
-  const ro = (i) => ['Ya', 'E', 'Sam', 'Sei', 'M', 'Lok', 'Tsut', 'Ba', 'Gao'][i];
+  $: isAllPairs = winner.up.length === 14 && (() => {
+    const tiles = winner.up.map(t => $store.tiles[t]);
+    const wild = $store.wildcard;
+    const isW = (t) => wild && eq(t, wild);
+    let wilds = tiles.filter(isW).length;
+    const normals = tiles.filter(t => !isW(t));
+    const remaining = [...normals];
+    while (remaining.length) {
+      const tile = remaining.pop();
+      const idx = remaining.findIndex(other => eq(tile, other));
+      if (idx === -1) {
+        if (wilds > 0) { wilds--; } else { return false; }
+      } else {
+        remaining.splice(idx, 1);
+      }
+    }
+    return wilds % 2 === 0;
+  })();
 
-  // TODO: Will this be sufficient, or will going all Prolog be easier?
-  $: awards = {
-    1: {
-      '白板': {
-        romanized: 'Ba Ban',
-        description: 'Pong ba ban',
-        matched: includes(pong('dragon', 'Haku')),
-      },
-      '全求人': {
-        romanized: 'Chun Cao Yun',
-        description: 'All outside',
-        matched: winner.up.length === 0,
-      },
-      '獨聽': {
-        romanized: 'Doc Ting',
-        description: 'Calling one card',
-        matched: false, // TODO: this one is harder, requires analyzing the hand
-      },
-      '發財': {
-        romanized: 'Fa Tsai',
-        description: 'Pong fa tsai',
-        matched: includes(pong('dragon', 'Hatsu')),
-      },
-      '槓上花': {
-        romanized: 'Gong Tsern Fa',
-        description: 'Win off gong (pick up gong, win off of card picked up as a result of gong)',
-        matched: $store.source === 'back',
-      },
-      '紅中': {
-        romanized: 'Hong Tsong',
-        description: 'Pong hong tsong',
-        matched: includes(pong('dragon', 'Chun')),
-      },
-      '圈風': {
-        romanized: 'Hyun Feng',
-        description: 'Pong the round wind',
-        matched: includes(pong('wind', $store.wind)),
-      },
-      '缺一门': {
-        romanized: 'Ku Ye Mun',
-        description: 'Two numerical suits',
-        matched: winningSuits.size === 2 && !winningSuits.has('dragon') && !winningSuits.has('wind'),
-      },
-      '老小': {
-        romanized: 'Lo Siu',
-        description: 'Chow of ends of same suit',
-        matched: includes(tiles(Symbol('A'), 1, 2, 3, 7, 8, 9)),
-      },
-      '門風': {
-        romanized: 'Mun Feng',
-        description: 'Pong the wind depending on where you sit (jong is 東)',
-        matched: includes(tiles('wind', $store.turn)),
-      },
-      '没字没花': {
-        romanized: 'Mo Zi Mo Fa',
-        description: 'No flowers, no winds',
-        matched: false, // TODO: we don't have flowers, so I don't think this one is fair
-      },
-      '門前清': {
-        romanized: 'Mun Tsing Tsing',
-        description: 'All inside but win off of a played card',
-        matched: winner.down.length === 1 && ($store.source === 'discard' || $store.source === 'kong'),
-      },
-      '平糊': {
-        romanized: 'Ping Wu',
-        description: 'All chows',
-        matched: false, // TODO: better matching
-      },
-      '爵': {
-        romanized: 'Tsern',
-        description: 'Pair of eyes (2, 5, 8)',
-        matched: false, // TODO: better matching
-      },
-      '自摸': {
-        romanized: 'Tsi Mo',
-        description: 'Self touch',
-        matched: $store.source === 'front' || $store.source === 'back',
-      },
-      '姐妹': {
-        romanized: 'Tsi Mui',
-        description: 'Pair of same chow of different suits',
-        matched: false, // TODO: better matching
-      },
-      '断优': {
-        romanized: 'Tsun Yu',
-        description: 'No ends',
-        matched: !includes([{ suit: Symbol('A'), value: 1 }]) && !includes([{ suit: Symbol('A'), value: 9 }]),
-      },
-      '搶槓': {
-        romanized: 'Tsurng Gong',
-        description: 'Steal from another person\'s gong to win',
-        matched: $store.source === 'kong',
-      },
-      '一条龙': {
-        romanized: 'Ya Tiu Long',
-        description: 'Dragon (2 suits)',
-        matched: false, // TODO: better matching
-      },
-    },
-    2: {
-      '混优': {
-        romanized: 'Wan Yu',
-        description: 'All ends with winds',
-        matched: false, // TODO: better matching
-      },
-      '一班高': {
-        romanized: 'Ye Ban Go',
-        description: 'Two of the same chow, in the same suit',
-        matched: false, // TODO: better matching
-      },
-      '一条龙': {
-        romanized: 'Ya Tiu Long',
-        description: 'Dragon (3 suits)',
-        matched: false, // TODO: better matching
-      },
-    },
-    3: {
-      '對對糊': {
-        romanized: 'De De Wu',
-        description: 'All pongs',
-        matched: false, // TODO: better matching
-      },
-      '雞糊': {
-        romanized: 'Gai Wu',
-        description: 'Chicken hand, zero fans',
-        matched: () => Object.values(awards)
-          .flatMap(rules => Object.values(rules))
-          .map(rule => rule.matched)
-          .filter(rule => typeof rule !== 'function')
-          .reduce(async (first, next) => (await first) && !(await next), Promise.resolve(true)),
-      },
-      '五门齐': {
-        romanized: 'M Mun Tsai',
-        description: 'All five suits',
-        matched: winningSuits.size === 5,
-      },
-      '四相凤': {
-        romanized: 'Sam Tsern Vong',
-        description: 'Same chow of all three suits (can pong three sequential numbers for 1 limit)',
-        matched: false, // TODO: better matching
-      },
-      '全带优': {
-        romanized: 'Tsun Dai Yu',
-        description: 'All ends without winds',
-        matched: false, // TODO: better matching
-      },
-      '混一色': {
-        romanized: 'Wan Ya Se',
-        description: 'All one suit with winds',
-        matched: winningSuits.size === 2 && winningSuits.has('wind') && !winningSuits.has('dragon'),
-      },
-      '一条龙': {
-        romanized: 'Ya Tiu Long',
-        description: 'Dragon (1 suit)',
-        matched: includes(tiles(Symbol('A'), 1, 2, 3, 4, 5, 6, 7, 8, 9)),
-      },
-      '一摸三': {
-        romanized: 'Ya Mo Sam',
-        description: 'All inside with self touch',
-        matched: winner.down.length === 0,
-      },
-    },
-    5: {
-      '小三元': {
-        romanized: 'Siu Sam Yu',
-        description: 'Pong of any two of tsong, fa, ba ban with the third as eyes',
-        matched: false, // TODO: better matching
-      },
-      '小七对': {
-        romanized: 'Siu Tsut Doi',
-        description: 'All pairs',
-        matched: false, // TODO: special case?
-      },
-    },
-    8: {
-      '坎坎糊': {
-        romanized: 'Can Can Wu',
-        description: 'All pongs but all inside, must be calling eyes unless you self touch',
-        matched: false, // TODO: better matching
-      },
-      '大三元': {
-        romanized: 'Da Sam Yu',
-        description: 'Pong tsong, fa, and ban',
-        matched: includes([...pong('dragon', 'Haku'), ...pong('dragon', 'Hatsu'), ...pong('dragon', 'Chun')]),
-      },
-      '大七对': {
-        romanized: 'Dai Tsut Doi',
-        description: 'Two ya ban go\'s',
-        matched: false, // TODO: better matching
-      },
-      '小四喜': {
-        romanized: 'Siu Sei Hei',
-        description: 'Pong 3 winds with last as eyes',
-        matched: false, // TODO: better matching
-      },
-      '清一色': {
-        romanized: 'Ting Ya Se',
-        description: 'All one numerical suit',
-        matched: winningSuits.size === 1 && !winningSuits.has('wind') && !winningSuits.has('dragon'),
-      },
-      ...Object.fromEntries([1, 2, 3, 4, 5, 6, 7, 8, 9].map(value => [`全带${ch(value)}`, {
-        romanized: `Tsun Dai ${ro(value)}`,
-        description: `All ${value}`,
-        matched: includes(tiles(undefined, value, value, value, value, value, value, value, value, value, value, value, value, value, value, value)),
-      }])),
-    },
-    11: {
-      '全绿': {
-        romanized: 'Chuen Lo',
-        description: 'All green',
-        matched: false, // TODO: sticks 2, 3, 4, 6, 8 + salad
-      },
-      '大四喜': {
-        romanized: 'Da Sei Hei',
-        description: 'Pong all winds (东 南 西 北)',
-        matched: includes([...pong('wind', 'Ton'), ...pong('wind', 'Nan'), ...pong('wind', 'Shaa'), ...pong('wind', 'Pei')]),
-      },
-      '地糊': {
-        romanized: 'Dei Wu',
-        description: 'Win off first card played',
-        matched: false, // TODO: count how many cards have been played
-      },
-      '一四七': {
-        romanized: 'Ya Sei Tsut',
-        description: 'Pong any and only 1, 4, 7',
-        matched: false, // TODO: better matching
-      },
-      '二五八': {
-        romanized: 'E M Ba',
-        description: 'Pong any and only 2, 5, 8',
-        matched: false, // TODO: better matching
-      },
-      '三六九': {
-        romanized: 'Sam Lok Gao',
-        description: 'Pong any and only 3, 6, 9',
-        matched: false, // TODO: better matching
-      },
-      '十三不答': {
-        romanized: 'Sap Sam Ba Da',
-        description: 'Start the hand with zero connections, first card played cannot connect to anything in the hand',
-        matched: false, // TODO: special case
-      },
-      '十三大优': {
-        romanized: 'Sap Sam Dai Yu',
-        description: 'Have 1 and 9 of all suits, one of each wind and a pair of anything',
-        matched: false, // TODO: better matching
-      },
-      '天糊': {
-        romanized: 'Tian Wu',
-        description: 'Be the starter (jong) and win off the very start',
-        matched: false, // TODO: count how many cards have been played
-      },
-      '字一色': {
-        romanized: 'Zi Ya Se',
-        description: 'Pong all winds (东 南 四 北 + tsong, fa, ba ban)',
-        matched: !winningSuits.has('Pin') && !winningSuits.has('Sou') && !winningSuits.has('Man'),
-      },
-    },
-    [-11]: {
-      '詐糊': {
-        romanized: 'Za Wu',
-        description: 'Falsely claim that you have won, must pay everyone the maximum',
-        matched: false, // TODO: foxfriends/mahjong#7
-      },
-    },
-  };
+  $: isAllJiang = allTiles.every(t => typeof t.value === 'number' && [2, 5, 8].includes(t.value));
+  $: isAllWinds = allTiles.every(t => t.suit === 'wind');
+  $: isAllSameKind = (() => {
+    const suit = allTiles[0] && allTiles[0].suit;
+    return allTiles.every(t => t.suit === suit);
+  })();
+
+  $: hasNoWildcard = !$store.wildcard || !allTiles.some(t => eq(t, $store.wildcard));
+
+  $: kongCount = winner.down.filter(meld => meld.length >= 5).length;
+
+  $: scoreBreakdown = (() => {
+    const lines = [];
+    let score = 1;
+    lines.push({ label: '胡', value: '1' });
+
+    if (isDealer) {
+      score *= 2;
+      lines.push({ label: '庄家', value: 'x2' });
+    }
+    if (isSelfDraw) {
+      score *= 2;
+      lines.push({ label: '自摸', value: 'x2' });
+    }
+
+    if (isPongpong) {
+      score += 5;
+      lines.push({ label: '碰碰胡', value: '+5' });
+    }
+    if (isAllClear) {
+      score += 5;
+      lines.push({ label: '门清', value: '+5' });
+    }
+    if (isAllFromOthers) {
+      score += 5;
+      lines.push({ label: '全求人', value: '+5' });
+    }
+
+    if (isAllPairs) {
+      score += 10;
+      lines.push({ label: '七对', value: '+10' });
+    }
+    if (isAllJiang) {
+      score += 10;
+      lines.push({ label: '全将', value: '+10' });
+    }
+    if (isAllWinds) {
+      score += 10;
+      lines.push({ label: '全风', value: '+10' });
+    }
+    if (isAllSameKind) {
+      score += 10;
+      lines.push({ label: '清一色', value: '+10' });
+    }
+
+    if (hasNoWildcard) {
+      score *= 2;
+      lines.push({ label: '无癞子', value: 'x2' });
+    }
+    for (let i = 0; i < kongCount; i++) {
+      score *= 2;
+      lines.push({ label: '杠', value: 'x2' });
+    }
+
+    return { lines, score };
+  })();
 
   async function playAgain() {
     const { schema } = await socket.send('playAgain');
     $store = new Schema(schema);
   }
-
-  function check(value) {
-    if (typeof value === 'function') return value();
-    return value;
-  }
 </script>
 
 <div class="container">
-  <h1 class="title">{$store[$store.turn].name} wins</h1>
-
-  <div class="warning">
-    Not all scores can be counted automatically at this time. This is very work in progress.
-    I will eventually try to make this fancier
-  </div>
+  <h1 class="title">{$store[$store.turn].name} 胡了</h1>
 
   <div class="scores">
-    {#each Object.entries(awards) as [fan, rules]}
-      {#each Object.entries(rules) as [name, { romanized, description, matched }]}
-        {#await check(matched) then matched}
-          {#if matched}
-            <div class='rule'>
-              {name} ({romanized}: {description}): {fan} 番
-            </div>
-          {/if}
-        {/await}
-      {/each}
+    {#each scoreBreakdown.lines as { label, value }}
+      <div class="rule">{label}: {value}</div>
     {/each}
+    <div class="total">合计: {scoreBreakdown.score} 分</div>
   </div>
 
   <button
     class="play-again"
     on:click={playAgain}>
-    Play Again
+    再来一局
   </button>
 </div>
 
@@ -363,7 +219,7 @@
     width: 800px;
     height: 70vh;
     transform: translateX(-50%);
-    background: rgba(255, 255, 255, 0.20);
+    background: rgba(0, 0, 0, 0.85);
     color: white;
   }
 
@@ -373,33 +229,37 @@
     margin: 0;
     padding: 10px;
     width: 80%;
+    font-size: 24pt;
     border-bottom: 1px solid rgba(255, 255, 255, 0.25);
-  }
-
-  .warning {
-    margin: 20px;
-    font-family: var(--font-english);
   }
 
   .scores {
     margin: 20px;
-    font-size: 24pt;
+    font-size: 20pt;
     font-family: var(--font-chinese);
   }
 
-  .title {
+  .rule {
+    margin: 8px 0;
+  }
+
+  .total {
+    margin-top: 16px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255, 255, 255, 0.5);
+    font-weight: bold;
     font-size: 24pt;
   }
 
   .play-again {
     margin-top: auto;
-    font-family: var(--font-english);
-    font-size: 14pt;
+    font-family: var(--font-chinese);
+    font-size: 16pt;
     background: rgba(255, 255, 255, 0.2);
     color: white;
     border: none;
     border-top: 1px solid rgba(255, 255, 255, 0.75);
-    padding: 8px;
+    padding: 12px;
     cursor: pointer;
     width: 100%;
   }
