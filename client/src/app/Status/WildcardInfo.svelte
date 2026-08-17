@@ -11,29 +11,26 @@
     return `background-image: url(${images[tile.value]})`;
   }
 
-  let indicatorStyle, wildcardStyle;
+  let wildcardStyle;
   $: {
-    if ($store.indicator !== undefined) {
-      indicatorStyle = tileStyle($store.tiles[$store.indicator]);
+    if ($store.wildcard) {
       wildcardStyle = tileStyle($store.wildcard);
     }
   }
 </script>
 
-{#if $store.indicator !== undefined}
+{#if $store.wildcard}
   <div class="wildcard-info">
-    <div class="label">Indicator</div>
-    <div class="tile" style={indicatorStyle} />
-    <div class="label">Wild</div>
+    <div class="label">癞子</div>
     <div class="tile wild" style={wildcardStyle} />
   </div>
 {/if}
 
 <style>
   .wildcard-info {
-    position: absolute;
-    top: 15vh;
-    right: 15vw;
+    position: fixed;
+    top: 20vh;
+    right: 20vw;
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -41,15 +38,15 @@
   }
 
   .label {
-    font-size: 14px;
+    font-size: 18px;
     color: white;
-    text-transform: uppercase;
     font-weight: bold;
+    font-family: var(--font-chinese);
   }
 
   .tile {
-    width: min(3vw, 3vh);
-    height: min(4vw, 4vh);
+    width: min(5vw, 5vh);
+    height: min(6.5vw, 6.5vh);
     border-radius: 0.3vh;
     background-position: center;
     background-size: contain;
