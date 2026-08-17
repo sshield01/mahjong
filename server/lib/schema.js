@@ -729,9 +729,10 @@ export default class Schema {
     const kongCount = winner.down.filter((meld) => meld.length >= 5).length;
 
     function calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount) {
-      let score = 1;
-      if (isLoserDealer) score *= 2;
-      if (isLoserDiscarder) score *= 2;
+      let base = 1;
+      if (isLoserDealer || isDealer) base *= 2;
+      if (isLoserDiscarder) base *= 2;
+      let score = base;
       if (isPongpong) score += 5;
       if (isAllClear) score += 5;
       if (isAllFromOthers) score += 5;
@@ -756,7 +757,7 @@ export default class Schema {
     for (const wind of WINDS) {
       if (this[wind] && wind !== position) {
         const isLoserDealer = wind === "Ton";
-        const isLoserDiscarder = !isSelfDraw && wind === this.previousTurn;
+        const isLoserDiscarder = isSelfDraw || wind === this.previousTurn;
         const loserKongCount = this[wind].down.filter((meld) => meld.length >= 5).length;
         const payment = Math.min(30, calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount));
         const name = this[wind].name;
