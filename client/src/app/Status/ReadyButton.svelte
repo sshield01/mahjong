@@ -16,9 +16,9 @@
 
 <button class='button' on:click={toggleReady}>
   {#if $store[$store.playerWind(socket.name)].ready}
-    Cancel
+    取消
   {:else}
-    Ready
+    准备
   {/if}
 </button>
 
