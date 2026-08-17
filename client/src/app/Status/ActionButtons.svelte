@@ -93,20 +93,20 @@
 
     {#if $store && Schema.winningHand($store, $store[myWind]) && $store.turn === myWind}
       <button class="action" on:click={win}>
-        Win
+        胡
       </button>
     {/if}
 
     {#if $store && $store.drawn !== undefined && $store.turn === myWind}
       {#each concealedKongs as tile}
         <button class="action" on:click={() => kong('concealed', tile)}>
-          Kong (<TextTile {tile} />)
+          杠 (<TextTile {tile} />)
         </button>
       {/each}
 
       {#each exposedKongs as tile}
         <button class="action" on:click={() => kong('augmented', tile)}>
-          Kong (<TextTile {tile} />)
+          杠 (<TextTile {tile} />)
         </button>
       {/each}
     {/if}
