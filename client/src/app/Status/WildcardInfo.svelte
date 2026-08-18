@@ -29,8 +29,8 @@
 <style>
   .wildcard-info {
     position: fixed;
-    top: 20vh;
-    right: 20vw;
+    top: 10vh;
+    right: 10vw;
     display: flex;
     flex-direction: column;
     align-items: center;
