@@ -29,8 +29,8 @@
 <style>
   .wildcard-info {
     position: fixed;
-    top: 10vh;
-    right: 10vw;
+    top: clamp(8px, 2vh, 10vh);
+    right: clamp(8px, 3vw, 10vw);
     display: flex;
     flex-direction: column;
     align-items: center;
@@ -38,15 +38,15 @@
   }
 
   .label {
-    font-size: 18px;
+    font-size: clamp(12px, 3vw, 18px);
     color: white;
     font-weight: bold;
     font-family: var(--font-chinese);
   }
 
   .tile {
-    width: min(5vw, 5vh);
-    height: min(6.5vw, 6.5vh);
+    width: clamp(28px, 5vw, 5vh);
+    height: clamp(36px, 6.5vw, 6.5vh);
     border-radius: 0.3vh;
     background-position: center;
     background-size: contain;

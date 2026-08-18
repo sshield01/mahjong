@@ -17,11 +17,12 @@
 
 <style>
   .tile {
-    position: absolute;
-    top: 32px;
-    left: 32px;
-    width: 4vh;
-    height: 6vh;
+    position: fixed;
+    top: clamp(8px, 2vh, 32px);
+    left: 50%;
+    transform: translateX(-50%);
+    width: clamp(28px, 4vh, 4vh);
+    height: clamp(42px, 6vh, 6vh);
     border-radius: 0.5vh;
     padding: 5%;
     background-position: center;

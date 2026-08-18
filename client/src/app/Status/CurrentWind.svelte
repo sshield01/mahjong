@@ -15,12 +15,11 @@
 
 <style>
   .wind {
-    position: absolute;
+    position: fixed;
     top: 0;
-    left: 100vw;
-    padding: 32px;
-    transform: translateX(-100%);
-    font-size: 24pt;
+    right: 0;
+    padding: clamp(12px, 3vw, 32px);
+    font-size: clamp(16pt, 4vw, 24pt);
     color: white;
     font-family: var(--font-chinese);
   }

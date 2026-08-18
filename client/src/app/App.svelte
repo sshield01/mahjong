@@ -71,9 +71,32 @@
       adjustment += direction * SPEED;
     }
   }
+
+  let touchStartY = null;
+  function touchstart(event) {
+    if (state !== PLAY) return;
+    if (event.touches.length === 2) {
+      touchStartY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
+    }
+  }
+  function touchmove(event) {
+    if (state !== PLAY || touchStartY === null) return;
+    if (event.touches.length === 2) {
+      const currentY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
+      const delta = (currentY - touchStartY) * 0.3;
+      const newAngle = 60 + adjustment + delta * 0.5;
+      if (newAngle >= 0 && newAngle <= 90) {
+        adjustment += delta * 0.5;
+      }
+      touchStartY = currentY;
+    }
+  }
+  function touchend() {
+    touchStartY = null;
+  }
 </script>
 
-<svelte:window on:wheel={scroll} />
+<svelte:window on:wheel={scroll} on:touchstart={touchstart} on:touchmove={touchmove} on:touchend={touchend} />
 <div class="layer full">
   <Table
     angle={state === PLAY ? tableAngle : 0}
@@ -134,27 +157,32 @@
   flex-direction: column;
   width: 100%;
   max-width: 600px;
-  margin: 50px auto;
+  margin: clamp(20px, 5vh, 50px) auto;
+  padding: 0 16px;
+  box-sizing: border-box;
 }
 
 .input {
-  font-size: 16pt;
+  font-size: clamp(14pt, 4vw, 16pt);
   border: none;
   background: none;
   border-bottom: 1px solid rgba(255, 255, 255, 0.25);
+  padding: 12px 0;
 
   font-family: var(--font-english);
   width: 100%;
 }
 
 .button {
-  background: none;
-  border: none;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 6px;
   cursor: pointer;
 
-  margin: 8px 0;
-  padding: 8px 16px;
+  margin: 12px 0;
+  padding: 12px 24px;
   margin-left: auto;
+  font-size: clamp(12pt, 3.5vw, 14pt);
 
   font-family: var(--font-english);
 }
@@ -163,7 +191,7 @@
 
 .error, .info {
   padding: 16px 0;
-  font-size: 14pt;
+  font-size: clamp(12pt, 3.5vw, 14pt);
   font-family: var(--font-english);
 }
 </style>

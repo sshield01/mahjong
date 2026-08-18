@@ -81,16 +81,20 @@
 }
 
 .top-label, .bottom-label, .right-label, .left-label {
-  padding: 40px 0;
-  color: white;
-  font-size: 60pt;
+  padding: clamp(6px, 1.5vh, 16px) 0;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: clamp(12pt, 3vmin, 20pt);
   font-family: var(--font-english);
+  font-weight: 600;
   text-align: center;
+  letter-spacing: 1px;
 }
 
 .top-label::before, .bottom-label::before, .right-label::before, .left-label::before {
   font-family: var(--font-chinese);
-  margin-right: 40px;
+  margin-right: 8px;
+  opacity: 0.6;
+  font-size: 0.8em;
 }
 
 .bottom-label::before {
@@ -145,8 +149,6 @@
   top: 100%;
   left: 0;
   width: 100%;
-  transform-origin: center;
-  transform: rotateZ(180deg);
 }
 
 .highlight {

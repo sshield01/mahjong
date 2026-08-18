@@ -13,91 +13,90 @@
   $: isSelfDraw = $store.source === 'front' || $store.source === 'back';
 
   $: isPongpong = (() => {
+    const isW = t => $store.wildcard && eq(t, $store.wildcard);
+    const hasPairInDown = winner.down.some(meld => {
+      const meldTiles = meld.filter(t => typeof t === 'number');
+      return meldTiles.length === 2;
+    });
     const downValid = winner.down.every(meld => {
       const meldTiles = meld.filter(t => typeof t === 'number').map(t => $store.tiles[t]);
-      return meldTiles.length >= 3 && meldTiles.every(t => eq(t, meldTiles[0]));
+      return (meldTiles.length >= 3 && meldTiles.every(t => eq(t, meldTiles[0]))) ||
+        meldTiles.length === 2;
     });
     if (!downValid) return false;
     const handTiles = winner.up.map(t => $store.tiles[t]);
-    const nonWild = handTiles.filter(t => !($store.wildcard && eq(t, $store.wildcard)));
+    const nonWild = handTiles.filter(t => !isW(t));
     const wilds = handTiles.length - nonWild.length;
-    let remaining = [...nonWild];
-    let usedWilds = 0;
-    // remove one pair
-    for (let i = 0; i < remaining.length; i++) {
-      const match = remaining.slice(i + 1).findIndex(t => eq(t, remaining[i]));
-      if (match !== -1) {
-        const rest = [...remaining];
-        rest.splice(i + 1 + match, 1);
-        rest.splice(i, 1);
-        // check all triplets in rest
-        let check = [...rest];
-        let ok = true;
-        let w = wilds;
-        while (check.length > 0) {
-          const first = check[0];
-          const matches = check.filter(t => eq(t, first)).length;
-          if (matches >= 3) {
-            check = check.filter((t, idx) => { let c = 0; return !(eq(t, first) && ++c <= 3); });
-            // remove 3 of first
-            let removed = 0;
-            check = [...check]; // reset
-            check = rest.filter(() => true); // redo
-            // simpler approach
-            break;
-          }
-          ok = false;
-          break;
-        }
-        // simplified: just check if rest length is divisible by 3 and all triplets
-        if (rest.length % 3 === 0) {
-          let triplets = [...rest];
-          let valid = true;
-          let ww = wilds;
-          while (triplets.length > 0) {
-            const f = triplets[0];
-            const cnt = triplets.filter(t => eq(t, f)).length;
-            if (cnt >= 3) {
-              let r = 0;
-              triplets = triplets.filter(t => !(eq(t, f) && ++r <= 3));
-            } else if (cnt + ww >= 3) {
-              ww -= (3 - cnt);
-              triplets = triplets.filter(t => !eq(t, f));
-            } else {
-              valid = false;
-              break;
-            }
-          }
-          if (valid) return true;
-        }
-      }
-    }
-    // try with wildcard as pair partner
-    if (wilds >= 1 && nonWild.length % 3 === 0) {
+
+    if (hasPairInDown) {
       let triplets = [...nonWild];
+      let w = wilds;
       let valid = true;
-      let ww = wilds - 1;
       while (triplets.length > 0) {
         const f = triplets[0];
-        const cnt = triplets.filter(t => eq(t, f)).length;
-        if (cnt >= 3) {
+        const c = triplets.filter(t => eq(t, f)).length;
+        if (c >= 3) {
           let r = 0;
           triplets = triplets.filter(t => !(eq(t, f) && ++r <= 3));
-        } else if (cnt + ww >= 3) {
-          ww -= (3 - cnt);
+        } else if (c + w >= 3) {
+          w -= (3 - c);
           triplets = triplets.filter(t => !eq(t, f));
-        } else {
-          valid = false;
-          break;
-        }
+        } else { valid = false; break; }
       }
-      if (valid) return true;
+      if (valid && w % 3 === 0) return true;
+      return false;
+    }
+
+    for (let i = 0; i < nonWild.length; i++) {
+      if (nonWild.slice(0, i).some(t => eq(t, nonWild[i]))) continue;
+      const cnt = nonWild.filter(t => eq(t, nonWild[i])).length;
+      if (cnt >= 2) {
+        const rest = [];
+        let pairRemoved = 0;
+        for (const t of nonWild) {
+          if (eq(t, nonWild[i]) && pairRemoved < 2) { pairRemoved++; continue; }
+          rest.push(t);
+        }
+        let triplets = [...rest];
+        let w = wilds;
+        let valid = true;
+        while (triplets.length > 0) {
+          const f = triplets[0];
+          const c = triplets.filter(t => eq(t, f)).length;
+          if (c >= 3) {
+            let r = 0;
+            triplets = triplets.filter(t => !(eq(t, f) && ++r <= 3));
+          } else if (c + w >= 3) {
+            w -= (3 - c);
+            triplets = triplets.filter(t => !eq(t, f));
+          } else { valid = false; break; }
+        }
+        if (valid && w % 3 === 0) return true;
+      }
+    }
+    // pair with wildcard
+    if (wilds >= 1 && nonWild.length % 3 === 0) {
+      let triplets = [...nonWild];
+      let w = wilds - 1;
+      let valid = true;
+      while (triplets.length > 0) {
+        const f = triplets[0];
+        const c = triplets.filter(t => eq(t, f)).length;
+        if (c >= 3) {
+          let r = 0;
+          triplets = triplets.filter(t => !(eq(t, f) && ++r <= 3));
+        } else if (c + w >= 3) {
+          w -= (3 - c);
+          triplets = triplets.filter(t => !eq(t, f));
+        } else { valid = false; break; }
+      }
+      if (valid && w % 3 === 0) return true;
     }
     return false;
   })();
 
   $: isAllClear = winner.down.length === 0 && isSelfDraw;
-  $: isAllFromOthers = !isSelfDraw && winner.down.length >= 3;
+  $: isAllFromOthers = !isSelfDraw && winner.down.length >= 4;
 
   $: isAllPairs = (() => {
     const allIndices = [...winner.up, ...winner.down.flat().filter(t => typeof t === 'number')];
@@ -177,7 +176,7 @@
     if (isAllWinds) lines.push({ label: '全风', value: '+10' });
     if (isAllSameKind) lines.push({ label: '清一色', value: '+10' });
     for (let i = 0; i < kongCount; i++) lines.push({ label: '杠', value: 'x2' });
-    for (let i = 0; i < pairsFourOfAKind; i++) lines.push({ label: '豪华对子', value: 'x2' });
+    for (let i = 0; i < pairsFourOfAKind; i++) lines.push({ label: '四归一', value: 'x2' });
 
     const losers = [];
     let winnerTotal = 0;
@@ -251,14 +250,17 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    position: absolute;
-    left: 50vw;
-    top: 15vh;
-    width: 800px;
-    height: 70vh;
+    position: fixed;
+    left: 50%;
+    top: 5vh;
+    width: min(90vw, 800px);
+    max-height: 90vh;
     transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.85);
+    background: rgba(0, 0, 0, 0.9);
     color: white;
+    border-radius: 8px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .title {
@@ -267,32 +269,33 @@
     margin: 0;
     padding: 10px;
     width: 80%;
-    font-size: 24pt;
+    font-size: clamp(18pt, 5vw, 24pt);
     border-bottom: 1px solid rgba(255, 255, 255, 0.25);
   }
 
   .scores {
-    margin: 20px;
-    font-size: 20pt;
+    margin: clamp(10px, 2vh, 20px);
+    font-size: clamp(14pt, 4vw, 20pt);
     font-family: var(--font-chinese);
   }
 
   .rule {
-    margin: 8px 0;
+    margin: 6px 0;
   }
 
   .round-results {
-    margin-top: 12px;
+    margin-top: 10px;
     padding-top: 8px;
     border-top: 1px solid rgba(255, 255, 255, 0.3);
-    font-size: 18pt;
+    font-size: clamp(12pt, 3.5vw, 18pt);
   }
 
   .result-row {
     display: flex;
     justify-content: space-between;
     margin: 6px 0;
-    min-width: 250px;
+    min-width: min(250px, 60vw);
+    gap: 16px;
   }
 
   .positive {
@@ -304,24 +307,25 @@
   }
 
   .cumulative {
-    margin: 20px;
+    margin: clamp(10px, 2vh, 20px);
     padding-top: 12px;
     border-top: 1px solid rgba(255, 255, 255, 0.3);
     font-family: var(--font-chinese);
-    font-size: 16pt;
+    font-size: clamp(12pt, 3.5vw, 16pt);
   }
 
   .cumulative-title {
     font-weight: bold;
     margin-bottom: 8px;
-    font-size: 18pt;
+    font-size: clamp(14pt, 4vw, 18pt);
   }
 
   .cumulative-row {
     display: flex;
     justify-content: space-between;
     margin: 4px 0;
-    min-width: 200px;
+    min-width: min(200px, 50vw);
+    gap: 12px;
   }
 
   .player-score.positive {
@@ -335,13 +339,14 @@
   .play-again {
     margin-top: auto;
     font-family: var(--font-chinese);
-    font-size: 16pt;
+    font-size: clamp(14pt, 4vw, 16pt);
     background: rgba(255, 255, 255, 0.2);
     color: white;
     border: none;
     border-top: 1px solid rgba(255, 255, 255, 0.75);
-    padding: 12px;
+    padding: clamp(10px, 2vh, 12px);
     cursor: pointer;
     width: 100%;
+    border-radius: 0 0 8px 8px;
   }
 </style>

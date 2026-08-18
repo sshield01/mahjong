@@ -236,25 +236,53 @@ export default class Schema {
         return meldTiles.length >= 3 && meldTiles.every((t) => eq(t, meldTiles[0]));
       });
       if (!downValid) return false;
-      const [...remaining] = tiles;
-      for (let i = 0; i < remaining.length; i++) {
-        const pair = remaining.filter((other) => eq(remaining[i], other));
-        if (pair.length === 2) {
-          const rest = remaining.filter((_, idx) => idx !== i && !eq(remaining[idx], remaining[i]) || false);
-          const withoutPair = [...remaining];
-          withoutPair.splice(withoutPair.indexOf(pair[0]), 1);
-          withoutPair.splice(withoutPair.indexOf(pair[1]), 1);
-          const allTriplets = withoutPair.length % 3 === 0 && (function check(t) {
-            if (t.length === 0) return true;
-            const first = t[0];
-            const matches = t.filter((x) => eq(x, first));
-            if (matches.length < 3) return false;
-            const next = [...t];
-            for (let m = 0; m < 3; m++) next.splice(next.findIndex((x) => eq(x, first)), 1);
-            return check(next);
-          })(withoutPair);
-          if (allTriplets) return true;
+      const nonWild = tiles.filter((t) => !isWild(t));
+      const wilds = tiles.length - nonWild.length;
+
+      for (let i = 0; i < nonWild.length; i++) {
+        if (nonWild.slice(0, i).some((t) => eq(t, nonWild[i]))) continue;
+        const cnt = nonWild.filter((t) => eq(t, nonWild[i])).length;
+        if (cnt >= 2) {
+          const rest = [];
+          let pairRemoved = 0;
+          for (const t of nonWild) {
+            if (eq(t, nonWild[i]) && pairRemoved < 2) { pairRemoved++; continue; }
+            rest.push(t);
+          }
+          let triplets = [...rest];
+          let w = wilds;
+          let valid = true;
+          while (triplets.length > 0) {
+            const f = triplets[0];
+            const c = triplets.filter((t) => eq(t, f)).length;
+            if (c >= 3) {
+              let r = 0;
+              triplets = triplets.filter((t) => !(eq(t, f) && ++r <= 3));
+            } else if (c + w >= 3) {
+              w -= (3 - c);
+              triplets = triplets.filter((t) => !eq(t, f));
+            } else { valid = false; break; }
+          }
+          if (valid && w % 3 === 0) return true;
         }
+      }
+      // pair with wildcard
+      if (wilds >= 1 && nonWild.length % 3 === 0) {
+        let triplets = [...nonWild];
+        let w = wilds - 1;
+        let valid = true;
+        while (triplets.length > 0) {
+          const f = triplets[0];
+          const c = triplets.filter((t) => eq(t, f)).length;
+          if (c >= 3) {
+            let r = 0;
+            triplets = triplets.filter((t) => !(eq(t, f) && ++r <= 3));
+          } else if (c + w >= 3) {
+            w -= (3 - c);
+            triplets = triplets.filter((t) => !eq(t, f));
+          } else { valid = false; break; }
+        }
+        if (valid && w % 3 === 0) return true;
       }
       return false;
     }
@@ -654,7 +682,7 @@ export default class Schema {
       this.source = "kong";
     }
     const allClear = false;
-    const allFromOthers = this[position].down.length === 3;
+    const allFromOthers = this[position].down.length >= 4;
     this.updateScores(position);
     return new Message("win", { position, eyes, reveal: this.tiles, kong, allClear, allFromOthers, scores: this.scores });
   }
@@ -669,50 +697,93 @@ export default class Schema {
     const isSelfDraw = this.source === "front" || this.source === "back";
 
     const isPongpong = (() => {
+      const isW = (t) => this.wildcard && eq(t, this.wildcard);
+      const hasPairInDown = winner.down.some((meld) => {
+        const meldTiles = meld.filter((t) => typeof t === "number");
+        return meldTiles.length === 2;
+      });
       const downValid = winner.down.every((meld) => {
         const meldTiles = meld
           .filter((t) => typeof t === "number")
           .map((t) => this.tiles[t]);
-        return meldTiles.length >= 3 && meldTiles.every((t) => eq(t, meldTiles[0]));
+        return (meldTiles.length >= 3 && meldTiles.every((t) => eq(t, meldTiles[0]))) ||
+          meldTiles.length === 2;
       });
       if (!downValid) return false;
       const handTiles = winner.up.map((t) => this.tiles[t]);
-      const isW = (t) => this.wildcard && eq(t, this.wildcard);
       const nonWild = handTiles.filter((t) => !isW(t));
       const wilds = handTiles.length - nonWild.length;
-      for (let i = 0; i < nonWild.length; i++) {
-        const pair = nonWild.filter((other) => eq(nonWild[i], other));
-        if (pair.length >= 2) {
-          const withoutPair = [...nonWild];
-          withoutPair.splice(withoutPair.indexOf(pair[0]), 1);
-          withoutPair.splice(withoutPair.indexOf(pair[1]), 1);
-          let triplets = [...withoutPair];
-          let w = wilds;
-          let valid = triplets.length % 3 === 0;
-          if (valid) {
-            while (triplets.length > 0) {
-              const f = triplets[0];
-              const cnt = triplets.filter((t) => eq(t, f)).length;
-              if (cnt >= 3) {
-                let r = 0;
-                triplets = triplets.filter((t) => !(eq(t, f) && ++r <= 3));
-              } else if (cnt + w >= 3) {
-                w -= 3 - cnt;
-                triplets = triplets.filter((t) => !eq(t, f));
-              } else {
-                valid = false;
-                break;
-              }
-            }
-          }
-          if (valid) return true;
+
+      if (hasPairInDown) {
+        // pair already in down (eyes win), hand should be all triplets
+        let triplets = [...nonWild];
+        let w = wilds;
+        let valid = true;
+        while (triplets.length > 0) {
+          const f = triplets[0];
+          const c = triplets.filter((t) => eq(t, f)).length;
+          if (c >= 3) {
+            let r = 0;
+            triplets = triplets.filter((t) => !(eq(t, f) && ++r <= 3));
+          } else if (c + w >= 3) {
+            w -= (3 - c);
+            triplets = triplets.filter((t) => !eq(t, f));
+          } else { valid = false; break; }
         }
+        if (valid && w % 3 === 0) return true;
+        return false;
+      }
+
+      for (let i = 0; i < nonWild.length; i++) {
+        if (nonWild.slice(0, i).some((t) => eq(t, nonWild[i]))) continue;
+        const cnt = nonWild.filter((t) => eq(t, nonWild[i])).length;
+        if (cnt >= 2) {
+          const rest = [];
+          let pairRemoved = 0;
+          for (const t of nonWild) {
+            if (eq(t, nonWild[i]) && pairRemoved < 2) { pairRemoved++; continue; }
+            rest.push(t);
+          }
+          let triplets = [...rest];
+          let w = wilds;
+          let valid = true;
+          while (triplets.length > 0) {
+            const f = triplets[0];
+            const c = triplets.filter((t) => eq(t, f)).length;
+            if (c >= 3) {
+              let r = 0;
+              triplets = triplets.filter((t) => !(eq(t, f) && ++r <= 3));
+            } else if (c + w >= 3) {
+              w -= (3 - c);
+              triplets = triplets.filter((t) => !eq(t, f));
+            } else { valid = false; break; }
+          }
+          if (valid && w % 3 === 0) return true;
+        }
+      }
+      // pair with wildcard
+      if (wilds >= 1 && nonWild.length % 3 === 0) {
+        let triplets = [...nonWild];
+        let w = wilds - 1;
+        let valid = true;
+        while (triplets.length > 0) {
+          const f = triplets[0];
+          const c = triplets.filter((t) => eq(t, f)).length;
+          if (c >= 3) {
+            let r = 0;
+            triplets = triplets.filter((t) => !(eq(t, f) && ++r <= 3));
+          } else if (c + w >= 3) {
+            w -= (3 - c);
+            triplets = triplets.filter((t) => !eq(t, f));
+          } else { valid = false; break; }
+        }
+        if (valid && w % 3 === 0) return true;
       }
       return false;
     })();
 
     const isAllClear = winner.down.length === 0 && isSelfDraw;
-    const isAllFromOthers = !isSelfDraw && winner.down.length >= 3;
+    const isAllFromOthers = !isSelfDraw && winner.down.length >= 4;
     const isAllPairs = (() => {
       const allIndices = [...winner.up, ...winner.down.flat().filter((t) => typeof t === "number")];
       if (allIndices.length !== 14) return false;

@@ -57,7 +57,7 @@
 
   .name {
     font-family: var(--font-english);
-    font-size: 16pt;
+    font-size: clamp(10pt, 3vw, 16pt);
     font-weight: bold;
     color: white;
   }

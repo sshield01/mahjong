@@ -6,7 +6,7 @@
 
 <style>
   .container {
-    margin: 100px;
+    margin: clamp(20px, 8vh, 100px) clamp(16px, 5vw, 100px);
   }
 
   .title, .subtitle {
@@ -16,10 +16,10 @@
   }
 
   .title {
-    font-size: 48pt;
+    font-size: clamp(24pt, 6vw, 48pt);
   }
 
   .subtitle {
-    font-size: 24pt;
+    font-size: clamp(14pt, 3vw, 24pt);
   }
 </style>

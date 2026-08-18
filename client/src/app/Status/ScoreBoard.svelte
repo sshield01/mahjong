@@ -18,21 +18,21 @@
 <style>
   .scoreboard {
     position: fixed;
-    top: 10vh;
-    left: 10vw;
+    top: clamp(8px, 2vh, 10vh);
+    left: clamp(8px, 3vw, 10vw);
     font-family: var(--font-chinese);
-    font-size: 14pt;
+    font-size: clamp(10pt, 2.5vw, 14pt);
     color: white;
     background: rgba(0, 0, 0, 0.5);
     border-radius: 8px;
-    padding: 8px 12px;
+    padding: 6px 10px;
   }
 
   .score-row {
     display: flex;
     justify-content: space-between;
-    gap: 16px;
-    margin: 4px 0;
+    gap: 12px;
+    margin: 3px 0;
   }
 
   .positive {

@@ -19,22 +19,19 @@
 <style>
   .votes {
     pointer-events: none;
-    position: absolute;
-    top: 100vh;
-    left: 100vw;
-    padding: 32px;
-    transform: translate(-100%, -100%);
+    position: fixed;
+    bottom: clamp(8px, 2vh, 32px);
+    right: clamp(8px, 3vw, 32px);
 
     display: flex;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: flex-end;
   }
 
   .vote {
     white-space: nowrap;
-    font-size: 18pt;
+    font-size: clamp(12pt, 3.5vw, 18pt);
     color: white;
     font-family: var(--font-english);
-    margin-left: auto;
   }
 </style>

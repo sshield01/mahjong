@@ -125,28 +125,28 @@
     
   .actions {
     position: absolute;
-    bottom: 50px;
-    left: 50px;
+    bottom: clamp(10px, 3vh, 50px);
+    left: clamp(10px, 3vw, 50px);
 
     display: flex;
     flex-direction: column;
-    min-width: 120px;
+    min-width: 80px;
     pointer-events: none;
   }
 
   .action {
     background-color: rgb(255, 255, 255);
     border: rgba(255, 255, 255, 0.75);
-    border-radius: 4px;
-    padding: 8px;
-    margin: 16px;
+    border-radius: 6px;
+    padding: clamp(6px, 1.5vh, 8px) clamp(10px, 2vw, 16px);
+    margin: clamp(4px, 1vh, 16px);
     pointer-events: auto;
-    font-size: 18pt;
+    font-size: clamp(14pt, 3.5vw, 18pt);
     cursor: pointer;
 
     display: flex;
     align-items: center;
     justify-content: center;
-    word-wrap: no-wrap;
+    white-space: nowrap;
   }
 </style>

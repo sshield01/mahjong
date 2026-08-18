@@ -24,18 +24,18 @@
 
 <style>
   .button {
-    position: absolute;
-    left: 50vw;
-    top: calc(100vh - 100px);
-    width: 300px;
+    position: fixed;
+    left: 50%;
+    bottom: clamp(20px, 5vh, 50px);
+    width: min(300px, 70vw);
     height: 50px;
     transform: translateX(-50%);
 
     border: 1px solid rgba(255, 255, 255, 0.25);
     border-radius: 28px;
-    background: rgba(255, 255, 255, 0.12);
-    font-family: var(--font-english);
-    font-size: 16pt;
+    background: rgba(0, 0, 0, 0.7);
+    font-family: var(--font-chinese);
+    font-size: clamp(14pt, 4vw, 16pt);
     color: white;
     cursor: pointer;
   }
