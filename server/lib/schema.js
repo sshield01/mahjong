@@ -736,6 +736,16 @@ export default class Schema {
     const hasNoWildcard =
       !this.wildcard || !allTiles.some((t) => eq(t, this.wildcard));
     const kongCount = winner.down.filter((meld) => meld.length >= 5).length;
+    const pairsFourOfAKind = (() => {
+      if (!isAllPairs) return 0;
+      const nonWild = allTiles.filter((t) => !(this.wildcard && eq(t, this.wildcard)));
+      const counts = {};
+      for (const t of nonWild) {
+        const key = t.suit + '|' + t.value;
+        counts[key] = (counts[key] || 0) + 1;
+      }
+      return Object.values(counts).filter((c) => c === 4).length;
+    })();
 
     function calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount) {
       let base = 1;
@@ -751,6 +761,7 @@ export default class Schema {
       if (isAllSameKind) score += 10;
       if (hasNoWildcard) score *= 2;
       for (let i = 0; i < kongCount + loserKongCount; i++) score *= 2;
+      for (let i = 0; i < pairsFourOfAKind; i++) score *= 2;
       return score;
     }
 
