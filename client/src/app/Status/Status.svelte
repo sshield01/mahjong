@@ -34,6 +34,7 @@
     <CurrentWind wind={$store.wind} />
   {/if}
   <WildcardInfo />
+  <ScoreBoard />
   <CurrentVotes />
 {:else}
   <PlayerList order={ORDER[$store.playerWind(socket.name)]} />
