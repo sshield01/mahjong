@@ -713,12 +713,15 @@ export default class Schema {
 
     const isAllClear = winner.down.length === 0 && isSelfDraw;
     const isAllFromOthers = !isSelfDraw && winner.down.length >= 3;
-    const isAllPairs =
-      winner.up.length === 14 &&
-      allPairs(
-        winner.up.map((t) => this.tiles[t]),
+    const isAllPairs = (() => {
+      const allIndices = [...winner.up, ...winner.down.flat().filter((t) => typeof t === "number")];
+      if (allIndices.length !== 14) return false;
+      if (winner.down.length > 1) return false;
+      return allPairs(
+        allIndices.map((t) => this.tiles[t]),
         this.wildcard,
       );
+    })();
     const nonWildTiles = allTiles.filter((t) => !(this.wildcard && eq(t, this.wildcard)));
     const isAllJiang = nonWildTiles.every(
       (t) => typeof t.value === "number" && [2, 5, 8].includes(t.value),
