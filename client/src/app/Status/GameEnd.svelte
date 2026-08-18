@@ -99,8 +99,11 @@
   $: isAllClear = winner.down.length === 0 && isSelfDraw;
   $: isAllFromOthers = !isSelfDraw && winner.down.length >= 3;
 
-  $: isAllPairs = winner.up.length === 14 && (() => {
-    const tiles = winner.up.map(t => $store.tiles[t]);
+  $: isAllPairs = (() => {
+    const allIndices = [...winner.up, ...winner.down.flat().filter(t => typeof t === 'number')];
+    if (allIndices.length !== 14) return false;
+    if (winner.down.length > 1) return false;
+    const tiles = allIndices.map(t => $store.tiles[t]);
     const wild = $store.wildcard;
     const isW = (t) => wild && eq(t, wild);
     let wilds = tiles.filter(isW).length;
