@@ -256,7 +256,7 @@
     width: min(90vw, 800px);
     max-height: 90vh;
     transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.9);
+    background: rgba(0, 0, 0, 0.7);
     color: white;
     border-radius: 8px;
     overflow-y: auto;
