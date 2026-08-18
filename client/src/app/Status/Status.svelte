@@ -8,6 +8,7 @@
   import CurrentVotes from './CurrentVotes.svelte';
   import Timer from './Timer.svelte';
   import WildcardInfo from './WildcardInfo.svelte';
+  import ScoreBoard from './ScoreBoard.svelte';
   import context from '../../game/context.js';
 
   const { socket, store } = context();
