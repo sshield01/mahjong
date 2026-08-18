@@ -135,6 +135,17 @@
 
   $: kongCount = winner.down.filter(meld => meld.length >= 5).length;
 
+  $: pairsFourOfAKind = (() => {
+    if (!isAllPairs) return 0;
+    const nonWild = allTiles.filter(t => !($store.wildcard && eq(t, $store.wildcard)));
+    const counts = {};
+    for (const t of nonWild) {
+      const key = t.suit + '|' + t.value;
+      counts[key] = (counts[key] || 0) + 1;
+    }
+    return Object.values(counts).filter(c => c === 4).length;
+  })();
+
   $: scoreBreakdown = (() => {
     const WINDS = ['Ton', 'Shaa', 'Pei', 'Nan'];
 
@@ -152,6 +163,7 @@
       if (isAllSameKind) score += 10;
       if (hasNoWildcard) score *= 2;
       for (let i = 0; i < kongCount + loserKongCount; i++) score *= 2;
+      for (let i = 0; i < pairsFourOfAKind; i++) score *= 2;
       return score;
     }
 
@@ -165,6 +177,7 @@
     if (isAllWinds) lines.push({ label: '全风', value: '+10' });
     if (isAllSameKind) lines.push({ label: '清一色', value: '+10' });
     for (let i = 0; i < kongCount; i++) lines.push({ label: '杠', value: 'x2' });
+    for (let i = 0; i < pairsFourOfAKind; i++) lines.push({ label: '豪华对子', value: 'x2' });
 
     const losers = [];
     let winnerTotal = 0;
