@@ -176,7 +176,7 @@
     if (isAllWinds) lines.push({ label: '全风', value: '+10' });
     if (isAllSameKind) lines.push({ label: '清一色', value: '+10' });
     for (let i = 0; i < kongCount; i++) lines.push({ label: '杠', value: 'x2' });
-    for (let i = 0; i < pairsFourOfAKind; i++) lines.push({ label: '四归一', value: 'x2' });
+    for (let i = 0; i < pairsFourOfAKind; i++) lines.push({ label: '豪华', value: 'x2' });
 
     const losers = [];
     let winnerTotal = 0;
