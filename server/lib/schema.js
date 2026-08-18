@@ -219,13 +219,16 @@ export default class Schema {
     const allTiles = [...tiles, ...downTiles];
 
     function allSameKind() {
-      const suit = allTiles[0].suit;
-      return allTiles.every((t) => t.suit === suit);
+      const nonWild = allTiles.filter((t) => !isWild(t));
+      if (nonWild.length === 0) return true;
+      const suit = nonWild[0].suit;
+      return nonWild.every((t) => t.suit === suit);
     }
 
-    if (allTiles.every((t) => t.suit === "wind")) return true;
+    const nonWildAll = allTiles.filter((t) => !isWild(t));
+    if (nonWildAll.every((t) => t.suit === "wind")) return true;
 
-    if (allTiles.every((t) => typeof t.value === "number" && [2, 5, 8].includes(t.value))) return true;
+    if (nonWildAll.every((t) => typeof t.value === "number" && [2, 5, 8].includes(t.value))) return true;
 
     function pongpong() {
       const downValid = player.down.every((meld) => {
@@ -716,13 +719,16 @@ export default class Schema {
         winner.up.map((t) => this.tiles[t]),
         this.wildcard,
       );
-    const isAllJiang = allTiles.every(
+    const nonWildTiles = allTiles.filter((t) => !(this.wildcard && eq(t, this.wildcard)));
+    const isAllJiang = nonWildTiles.every(
       (t) => typeof t.value === "number" && [2, 5, 8].includes(t.value),
     );
-    const isAllWinds = allTiles.every((t) => t.suit === "wind");
+    const isAllWinds = nonWildTiles.every((t) => t.suit === "wind");
     const isAllSameKind = (() => {
-      const suit = allTiles[0] && allTiles[0].suit;
-      return allTiles.every((t) => t.suit === suit);
+      const nonWild = allTiles.filter((t) => !(this.wildcard && eq(t, this.wildcard)));
+      if (nonWild.length === 0) return true;
+      const suit = nonWild[0].suit;
+      return nonWild.every((t) => t.suit === suit);
     })();
     const hasNoWildcard =
       !this.wildcard || !allTiles.some((t) => eq(t, this.wildcard));
