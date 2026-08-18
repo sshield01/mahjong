@@ -118,11 +118,14 @@
     return wilds % 2 === 0;
   })();
 
-  $: isAllJiang = allTiles.every(t => typeof t.value === 'number' && [2, 5, 8].includes(t.value));
-  $: isAllWinds = allTiles.every(t => t.suit === 'wind');
+  $: nonWildTiles = allTiles.filter(t => !($store.wildcard && eq(t, $store.wildcard)));
+  $: isAllJiang = nonWildTiles.every(t => typeof t.value === 'number' && [2, 5, 8].includes(t.value));
+  $: isAllWinds = nonWildTiles.every(t => t.suit === 'wind');
   $: isAllSameKind = (() => {
-    const suit = allTiles[0] && allTiles[0].suit;
-    return allTiles.every(t => t.suit === suit);
+    const nonWild = allTiles.filter(t => !($store.wildcard && eq(t, $store.wildcard)));
+    if (nonWild.length === 0) return true;
+    const suit = nonWild[0].suit;
+    return nonWild.every(t => t.suit === suit);
   })();
 
   $: hasNoWildcard = !$store.wildcard || !allTiles.some(t => eq(t, $store.wildcard));
