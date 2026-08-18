@@ -72,6 +72,11 @@
     }
   }
 
+   function resetAngle() {
+       if (state !== PLAY) return;
+	   adjustment = 0;
+   }
+
   let touchStartY = null;
   function touchstart(event) {
     if (state !== PLAY) return;
@@ -96,7 +101,7 @@
   }
 </script>
 
-<svelte:window on:wheel={scroll} on:touchstart={touchstart} on:touchmove={touchmove} on:touchend={touchend} />
+<svelte:window on:wheel={scroll} on:dblclick={resetAngle} on:touchstart={touchstart} on:touchmove={touchmove} on:touchend={touchend} />
 <div class="layer full">
   <Table
     angle={state === PLAY ? tableAngle : 0}
