@@ -125,7 +125,7 @@
     
   .actions {
     position: absolute;
-    bottom: clamp(10px, 3vh, 50px);
+    bottom: clamp(60px, 20vh, 50vh);
     left: clamp(10px, 3vw, 50px);
 
     display: flex;
