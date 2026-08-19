@@ -130,7 +130,12 @@
     return nonWild.every(t => t.suit === suit);
   })();
 
-  $: hasNoWildcard = !$store.wildcard || !allTiles.some(t => eq(t, $store.wildcard));
+  $: hasNoWildcard = (() => {
+     if (!$store.wildcard) return true;
+	 if (!allTiles.some(t => eq(t, $store.wildcard))) return true;
+	 const noWildStore = { ...$store, wildcard: null };
+	 return Schema.winningHand(noWildStore, winner);
+  })();
 
   $: kongCount = winner.down.filter(meld => meld.length >= 5).length;
 

@@ -804,8 +804,12 @@ export default class Schema {
       const suit = nonWild[0].suit;
       return nonWild.every((t) => t.suit === suit);
     })();
-    const hasNoWildcard =
-      !this.wildcard || !allTiles.some((t) => eq(t, this.wildcard));
+    const hasNoWildcard = (() => {
+		if (!this.wildcard) return ture;
+		if (!allTiles.some((t) =? eq(t, this.wildcard))) return true;
+		const noWildSchema = { ...this, wildcard: null};
+		return Schema.winningHand(noWildSchema, winner);
+	})();
     const kongCount = winner.down.filter((meld) => meld.length >= 5).length;
     const pairsFourOfAKind = (() => {
       if (!isAllPairs) return 0;
