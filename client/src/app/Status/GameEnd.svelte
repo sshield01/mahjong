@@ -158,7 +158,7 @@
       if (isLoserDealer || isDealer) base *= 2;
       if (isLoserDiscarder) base *= 2;
       let score = base;
-      if (isPongpong) score += 5;
+      if (isPongpong && !isAllPairs) score += 5;
       if (isAllClear) score += 5;
       if (isAllFromOthers) score += 5;
       if (isAllPairs) score += 10;
@@ -173,7 +173,7 @@
 
     const lines = [];
     lines.push({ label: '胡', value: '1' });
-    if (isPongpong) lines.push({ label: '碰碰胡', value: '+5' });
+    if (isPongpong && !isAllPairs) lines.push({ label: '碰碰胡', value: '+5' });
     if (isAllClear) lines.push({ label: '门清', value: '+5' });
     if (isAllFromOthers) lines.push({ label: '全求人', value: '+5' });
     if (isAllPairs) lines.push({ label: '七对', value: '+10' });

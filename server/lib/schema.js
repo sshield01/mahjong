@@ -827,7 +827,7 @@ export default class Schema {
       if (isLoserDealer || isDealer) base *= 2;
       if (isLoserDiscarder) base *= 2;
       let score = base;
-      if (isPongpong) score += 5;
+      if (isPongpong && !isAllPairs) score += 5;
       if (isAllClear) score += 5;
       if (isAllFromOthers) score += 5;
       if (isAllPairs) score += 10;
