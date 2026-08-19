@@ -190,12 +190,13 @@
         const isLoserDealer = wind === 'Ton';
         const isLoserDiscarder = isSelfDraw || wind === $store.previousTurn;
         const loserKongCount = $store[wind].down.filter(meld => meld.length >= 5).length;
-        const payment = Math.min(30, calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount));
+		const rawScore = calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount);
+        const payment = Math.min(30, rawScore);
         const reasons = [];
         if (isLoserDealer) reasons.push('庄家');
         if (isLoserDiscarder) reasons.push(isSelfDraw ? '自摸' : '放炮');
         if (loserKongCount > 0) reasons.push(`杠x${loserKongCount}`);
-        losers.push({ name: $store[wind].name, payment, reasons });
+        losers.push({ name: $store[wind].name, payment, rawScore, reasons });
         winnerTotal += payment;
       }
     }
@@ -225,7 +226,7 @@
       {#each scoreBreakdown.losers as loser}
         <div class="result-row">
           <span>{loser.name}{loser.reasons.length ? ' (' + loser.reasons.join(', ') + ')' : ''}</span>
-          <span class="negative">-{loser.payment}</span>
+          <span class="negative">-{loser.payment}{loser.rawScore > 30 ? ` (${loser.rawScore})` : ''}</span>
         </div>
       {/each}
     </div>
@@ -257,11 +258,11 @@
     align-items: center;
     position: fixed;
     left: 50%;
-    top: 5vh;
+    top: 50%;
+	transform: translate(-50%, -50%);
     width: min(90vw, 800px);
-    max-height: 90vh;
-    transform: translateX(-50%);
-    background: rgba(0, 0, 0, 0.7);
+    max-height: 80vh;  
+    background: rgba(0, 0, 0, 0.65);
     color: white;
     border-radius: 8px;
     overflow-y: auto;
