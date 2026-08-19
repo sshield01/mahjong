@@ -7,3 +7,4 @@ export { default as pong } from "./pong.js";
 export { default as win } from "./win.js";
 export { default as ignore } from "./ignore.js";
 export { default as declare } from "./declare.js";
+export { default as exposeWildcard } from "./exposeWildcard.js";

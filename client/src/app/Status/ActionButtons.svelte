@@ -69,6 +69,19 @@
       console.log(error);
     }
   }
+
+  async function exposeWild() {
+    try {
+      await socket.send('exposeWildcard');
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  $: canExposeWildcard = $store && $store.drawn !== undefined && $store.turn === myWind &&
+    $store.wildcard && $store[myWind].down.length > 0 &&
+    eq($store.tiles[$store.drawn], $store.wildcard) &&
+    $store[myWind].up.filter((t) => eq($store.tiles[t], $store.wildcard)).length >= 2;
 </script>
 
 <div class="container">
@@ -98,6 +111,12 @@
     {/if}
 
     {#if $store && $store.drawn !== undefined && $store.turn === myWind}
+      {#if canExposeWildcard}
+        <button class="action" on:click={exposeWild}>
+          亮
+        </button>
+      {/if}
+
       {#each concealedKongs as tile}
         <button class="action" on:click={() => kong('concealed', tile)}>
           杠 (<TextTile {tile} />)
@@ -139,7 +158,7 @@
     border: rgba(255, 255, 255, 0.75);
     border-radius: 6px;
     padding: clamp(6px, 1.5vh, 8px) clamp(10px, 2vw, 16px);
-    margin: clamp(4px, 1vh, 16px);
+    margin: clamp(2px, 0.5vh, 6px);
     pointer-events: auto;
     font-size: clamp(14pt, 3.5vw, 18pt);
     cursor: pointer;

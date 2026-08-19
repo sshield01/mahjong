@@ -18,7 +18,7 @@
   {#if $store[$store.playerWind(socket.name)].ready}
     取消
   {:else}
-    准备
+    开始
   {/if}
 </button>
 

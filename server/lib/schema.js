@@ -19,7 +19,7 @@ function nextTileType(tile) {
 }
 
 export function player(name) {
-  return { name, up: [], down: [], discarded: [], ready: false };
+  return { name, up: [], down: [], discarded: [], ready: false, exposedWildcards: [] };
 }
 
 function tile(suit, value) {
@@ -295,6 +295,15 @@ export default class Schema {
       }
     }
 
+    const wildcardCount = tiles.filter(isWild).length;
+    const hasExposedWildcards = (player.exposedWildcards || []).length > 0;
+    if (wildcardCount >= 2 && !hasExposedWildcards) {
+      const isAllClear = player.down.length === 0;
+      if (!allSameKind() && !isAllClear) {
+        return false;
+      }
+    }
+
     function validEye(tile) {
       if (isWild(tile)) return true;
       if (allSameKind()) return typeof tile.value === "number";
@@ -472,6 +481,30 @@ export default class Schema {
     delete this.discarded;
     this[position].up.push(tile);
     return [new Message("draw", { tile, wall, stack }), this.tiles[tile]];
+  }
+
+  exposeWildcard(player) {
+    const position = this.playerWind(player);
+    if (position !== this.turn) {
+      throw new Error("It is not your turn.");
+    }
+    if (this.drawn === undefined) {
+      throw new Error("You must draw first.");
+    }
+    if (!this.wildcard || !eq(this.tiles[this.drawn], this.wildcard)) {
+      throw new Error("The drawn tile is not a wildcard.");
+    }
+    if (this[position].down.length === 0) {
+      throw new Error("You must have exposed melds to expose a wildcard.");
+    }
+    const wildcardCount = this[position].up
+      .filter((t) => eq(this.tiles[t], this.wildcard)).length;
+    if (wildcardCount < 2) {
+      throw new Error("You must have at least 2 wildcards to expose one.");
+    }
+    if (!this[position].exposedWildcards) this[position].exposedWildcards = [];
+    this[position].exposedWildcards.push(this.drawn);
+    return new Message("exposeWildcard", { position, tile: this.drawn });
   }
 
   pong(position) {
@@ -805,11 +838,11 @@ export default class Schema {
       return nonWild.every((t) => t.suit === suit);
     })();
     const hasNoWildcard = (() => {
-		if (!this.wildcard) return ture;
-		if (!allTiles.some((t) => eq(t, this.wildcard))) return true;
-		const noWildSchema = { ...this, wildcard: null};
-		return Schema.winningHand(noWildSchema, winner);
-	})();
+      if (!this.wildcard) return true;
+      if (!allTiles.some((t) => eq(t, this.wildcard))) return true;
+      const noWildSchema = { ...this, wildcard: null };
+      return Schema.winningHand(noWildSchema, winner);
+    })();
     const kongCount = winner.down.filter((meld) => meld.length >= 5).length;
     const pairsFourOfAKind = (() => {
       if (!isAllPairs) return 0;

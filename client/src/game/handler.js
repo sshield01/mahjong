@@ -136,6 +136,13 @@ export default async function handler(
         }
         break;
       }
+      case "exposeWildcard": {
+        const { position, tile } = message.body;
+        if (!schema[position].exposedWildcards) schema[position].exposedWildcards = [];
+        schema[position].exposedWildcards.push(tile);
+        store.set(schema);
+        break;
+      }
       case "win": {
         window.clearTimeout((get(timer) || {}).handle);
         selectionSets.set([]);

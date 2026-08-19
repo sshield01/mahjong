@@ -18,16 +18,18 @@
 <style>
   .tile {
     position: fixed;
-    top: clamp(8px, 2vh, 32px);
+    top: clamp(4px, 1vh, 8px);
     left: 50%;
     transform: translateX(-50%);
-    width: clamp(28px, 4vh, 4vh);
-    height: clamp(42px, 6vh, 6vh);
-    border-radius: 0.5vh;
-    padding: 5%;
+    width: clamp(14px, 2.5vh, 3vh);
+    height: clamp(21px, 3.75vh, 4.5vh);
+    border-radius: 0.3vh;
+    padding: 3%;
     background-position: center;
     background-size: contain;
     background-repeat: no-repeat;
     background-color: white;
+    opacity: 0.85;
+    pointer-events: none;
   }
 </style>
