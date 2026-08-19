@@ -806,7 +806,7 @@ export default class Schema {
     })();
     const hasNoWildcard = (() => {
 		if (!this.wildcard) return ture;
-		if (!allTiles.some((t) =? eq(t, this.wildcard))) return true;
+		if (!allTiles.some((t) => eq(t, this.wildcard))) return true;
 		const noWildSchema = { ...this, wildcard: null};
 		return Schema.winningHand(noWildSchema, winner);
 	})();
