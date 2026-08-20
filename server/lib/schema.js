@@ -984,7 +984,17 @@ export default class Schema {
     this.discarded = tile;
     delete this.drawn;
     this.nextTurn();
-    return new Message("discard", { position, tile, reveal: this.tiles[tile] });
+    const discard = this.tiles[tile];
+    const isWild = this.wildcard && eq(discard, this.wildcard);
+    const hasClaims = !isWild && WINDS.some((wind) => {
+      if (!this[wind] || wind === position) return false;
+      const hand = this[wind].up.map((t) => this.tiles[t]);
+      if (hand.filter((t) => eq(t, discard)).length >= 2) return true;
+      const playerObj = { ...this[wind], up: [...this[wind].up, tile] };
+      if (Schema.winningHand(this, playerObj, tile)) return true;
+      return false;
+    });
+    return new Message("discard", { position, tile, reveal: discard, hasClaims });
   }
 
   nextTurn() {

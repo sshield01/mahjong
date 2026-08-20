@@ -61,7 +61,7 @@ export default async function handler(
         break;
       }
       case "discard": {
-        const { position, tile, reveal } = message.body;
+        const { position, tile, reveal, hasClaims } = message.body;
         currentVotes.set({ [position]: { method: "Discard", priority: 0 } });
         schema.tiles[tile] = reveal;
         const index = schema[position].up.indexOf(tile);
@@ -73,13 +73,14 @@ export default async function handler(
         store.set(schema);
         const myWind = schema.playerWind(socket.name);
         if (position !== myWind && !hasActions(schema, myWind)) {
-		  setTimeout(() => {		  
+          const delay = hasClaims ? (schema.turn === myWind ? 2000 : 500) : 0;
+          setTimeout(() => {
             if (schema.turn === myWind) {
               socket.send("draw").catch(() => {});
             } else {
               socket.send("ignore").catch(() => {});
             }
-		  }, schema.turn === myWind ? 2000 : 500);
+          }, delay);
         }
         break;
       }
