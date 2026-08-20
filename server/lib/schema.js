@@ -301,8 +301,6 @@ export default class Schema {
 		return false;
 	}
 
-    }
-
     function validEye(tile) {
       if (isWild(tile)) return true;
       if (allSameKind()) return typeof tile.value === "number";
