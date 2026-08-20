@@ -73,11 +73,13 @@ export default async function handler(
         store.set(schema);
         const myWind = schema.playerWind(socket.name);
         if (position !== myWind && !hasActions(schema, myWind)) {
-          if (schema.turn === myWind) {
-            socket.send("draw").catch(() => {});
-          } else {
-            socket.send("ignore").catch(() => {});
-          }
+		  setTimeout(() => {		  
+            if (schema.turn === myWind) {
+              socket.send("draw").catch(() => {});
+            } else {
+              socket.send("ignore").catch(() => {});
+            }
+		  }, schema.turn === myWind ? 2000 : 500);
         }
         break;
       }
