@@ -1,7 +1,30 @@
-import Schema, { player } from "../lib/schema.js";
+import Schema, { player, eq } from "../lib/schema.js";
 import { get } from "svelte/store";
 
-const TIMER_DURATION = 4000;
+const TIMER_DURATION = 2000;
+
+function hasActions(schema, myWind) {
+  if (!schema.discarded && schema.discarded !== 0) return false;
+  if (schema.previousTurn === myWind) return false;
+  const discard = schema.tiles[schema.discarded];
+  const isWild = (t) => schema.wildcard && eq(t, schema.wildcard);
+  if (isWild(discard)) return false;
+  const hand = schema[myWind].up;
+  const handTiles = hand.map(t => schema.tiles[t]);
+  const matching = handTiles.filter(t => eq(t, discard));
+  if (matching.length >= 2) return true;
+  if (schema.turn === myWind && typeof discard.value === 'number') {
+    const ofSuit = handTiles.filter(t => t.suit === discard.suit && !isWild(t));
+    const vals = ofSuit.map(t => t.value);
+    if (vals.includes(discard.value - 2) && vals.includes(discard.value - 1)) return true;
+    if (vals.includes(discard.value - 1) && vals.includes(discard.value + 1)) return true;
+    if (vals.includes(discard.value + 1) && vals.includes(discard.value + 2)) return true;
+  }
+  const playerObj = { ...schema[myWind] };
+  playerObj.up = [...hand, schema.discarded];
+  if (Schema.winningHand(schema, playerObj, schema.discarded)) return true;
+  return false;
+}
 
 export default async function handler(
   schema,
@@ -48,6 +71,14 @@ export default async function handler(
         delete schema.drawn;
         schema.nextTurn();
         store.set(schema);
+        const myWind = schema.playerWind(socket.name);
+        if (position !== myWind && !hasActions(schema, myWind)) {
+          if (schema.turn === myWind) {
+            socket.send("draw").catch(() => {});
+          } else {
+            socket.send("ignore").catch(() => {});
+          }
+        }
         break;
       }
       case "draw": {
@@ -137,7 +168,8 @@ export default async function handler(
         break;
       }
       case "exposeWildcard": {
-        const { position, tile } = message.body;
+        const { position, tile, reveal } = message.body;
+        if (reveal) schema.tiles[tile] = reveal;
         if (!schema[position].exposedWildcards) schema[position].exposedWildcards = [];
         schema[position].exposedWildcards.push(tile);
         store.set(schema);

@@ -21,43 +21,86 @@
   const ctx = context();
   const { store } = ctx;
 
-  let name, room;
+  let name;
   let errorMessage;
 
   const PLAY = Symbol();
+  const CREATE = Symbol();
+  const JOIN = Symbol();
 
-  async function location() {
-    if (!room) { return; }
-    errorMessage = undefined;
-
-    try {
-      const { schema } = await socket.send('location', { room });
-      handler(schema, ctx);
-      state = PLAY;
-    } catch (error) {
-      console.log(error);
-      errorMessage = error;
-    }
+  function getRoomFromUrl() {
+    const hash = window.location.hash.slice(1);
+    return hash || null;
   }
 
-  async function identification() {
-    if (!name) { return; }
+  function generateRoom() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 4; i++) code += chars[Math.floor(Math.random() * chars.length)];
+    return code;
+  }
+
+  async function enterRoom(room) {
+    if (!name) return;
     errorMessage = undefined;
 
     try {
       await socket.send('identification', { name });
       socket.name = name;
-      state = location;
+    } catch (error) {
+      errorMessage = error;
+      return;
+    }
+
+    try {
+      const { schema, token } = await socket.send('location', { room });
+      if (token) {
+        localStorage.setItem('mahjong_session', JSON.stringify({ token, name, room }));
+      }
+      window.location.hash = room;
+      handler(schema, ctx);
+      state = PLAY;
     } catch (error) {
       errorMessage = error;
     }
   }
 
-  let state = identification;
+  function create() {
+    enterRoom(generateRoom());
+  }
+
+  function join() {
+    enterRoom(getRoomFromUrl());
+  }
+
+  let state = null;
+
+  async function tryReconnect() {
+    const saved = localStorage.getItem('mahjong_session');
+    if (!saved) {
+      state = getRoomFromUrl() ? JOIN : CREATE;
+      return;
+    }
+    try {
+      const { token } = JSON.parse(saved);
+      const result = await socket.send('reconnect', { token });
+      socket.name = result.name;
+      name = result.name;
+      window.location.hash = result.room;
+      handler(result.schema, ctx);
+      state = PLAY;
+    } catch (error) {
+      localStorage.removeItem('mahjong_session');
+      state = getRoomFromUrl() ? JOIN : CREATE;
+    }
+  }
+
+  tryReconnect();
 
   function submit(event) {
     if (event.key == 'Enter') {
-      state();
+      if (state === CREATE) create();
+      else if (state === JOIN) join();
     }
   }
 
@@ -72,10 +115,10 @@
     }
   }
 
-   function resetAngle() {
-       if (state !== PLAY) return;
-	   adjustment = 0;
-   }
+  function resetAngle() {
+    if (state !== PLAY) return;
+    adjustment = 0;
+  }
 
   let touchStartY = null;
   function touchstart(event) {
@@ -120,18 +163,15 @@
   <div class="layer">
     <Status />
   </div>
-{:else}
+{:else if state === CREATE || state === JOIN}
   <div class="layer full title">
     <Title>
       <div class="form">
-        {#if state === identification}
-          <input class="input" placeholder="Enter your name" bind:value={name} on:keydown={submit} autofocus tabindex='1' />
-          <button class="button" disabled={!name} on:click={() => state()}>Confirm</button>
-        {/if}
-        {#if state === location}
-          <div class="info">Welcome, <b>{name}</b>.</div>
-          <input class="input" placeholder="Enter a game name" bind:value={room} on:keydown={submit} autofocus tabindex='1' />
-          <button class="button" disabled={!room} on:click={() => state()}>Confirm</button>
+        <input class="input" placeholder="Name" bind:value={name} on:keydown={submit} autofocus tabindex='1' />
+        {#if state === CREATE}
+          <button class="button" disabled={!name} on:click={create}>Create Room</button>
+        {:else}
+          <button class="button" disabled={!name} on:click={join}>Join Room</button>
         {/if}
         {#if errorMessage}
           <div class="error">{errorMessage}</div>
@@ -199,4 +239,5 @@
   font-size: clamp(12pt, 3.5vw, 14pt);
   font-family: var(--font-english);
 }
+
 </style>

@@ -6,16 +6,17 @@ const SUITS = ["Pin", "Sou", "Man"];
 
 const NEXT_WIND = { Ton: "Nan", Nan: "Shaa", Shaa: "Pei", Pei: "Ton" };
 const PREV_WIND = { Nan: "Ton", Shaa: "Nan", Pei: "Shaa", Ton: "Pei" };
-const NEXT_DRAGON = { Chun: "Hatsu", Hatsu: "Haku", Haku: "Chun" };
+
+const HONOR_CYCLE = ["Ton", "Nan", "Shaa", "Pei", "Chun", "Hatsu", "Haku"];
+const NEXT_HONOR = Object.fromEntries(HONOR_CYCLE.map((h, i) => [h, HONOR_CYCLE[(i + 1) % HONOR_CYCLE.length]]));
+const HONOR_SUIT = { Ton: "wind", Nan: "wind", Shaa: "wind", Pei: "wind", Chun: "dragon", Hatsu: "dragon", Haku: "dragon" };
 
 function nextTileType(tile) {
   if (typeof tile.value === "number") {
     return { suit: tile.suit, value: tile.value === 9 ? 1 : tile.value + 1 };
   }
-  if (tile.suit === "wind") {
-    return { suit: "wind", value: NEXT_WIND[tile.value] };
-  }
-  return { suit: "dragon", value: NEXT_DRAGON[tile.value] };
+  const nextValue = NEXT_HONOR[tile.value];
+  return { suit: HONOR_SUIT[nextValue], value: nextValue };
 }
 
 export function player(name) {
@@ -111,7 +112,7 @@ export default class Schema {
     if (!schema.completed) {
       const down = WINDS.map((position) => schema[position])
         .filter((player) => !!player)
-        .map((player) => [...player.discarded, ...[].concat(...player.down)]);
+        .map((player) => [...player.discarded, ...[].concat(...player.down), ...(player.exposedWildcards || [])]);
       const position = schema.playerWind(player);
       const revealed = [...schema[position].up, ...[].concat(...down)];
       if (schema.indicator !== undefined) {
@@ -297,9 +298,10 @@ export default class Schema {
 
     const wildcardCount = tiles.filter(isWild).length;
     const hasExposedWildcards = (player.exposedWildcards || []).length > 0;
-	if (wildcardCount >= 2 && !hasExposedWildcards && !allSameKind()) {
-		return false;
-	}
+    const isAllClear = player.down.length === 0;
+    if (wildcardCount >= 2 && !hasExposedWildcards && !isAllClear && !allSameKind()) {
+      return false;
+    }
 
     function validEye(tile) {
       if (isWild(tile)) return true;
@@ -501,7 +503,7 @@ export default class Schema {
     }
     if (!this[position].exposedWildcards) this[position].exposedWildcards = [];
     this[position].exposedWildcards.push(this.drawn);
-    return new Message("exposeWildcard", { position, tile: this.drawn });
+    return new Message("exposeWildcard", { position, tile: this.drawn, reveal: this.tiles[this.drawn] });
   }
 
   pong(position) {
@@ -761,6 +763,59 @@ export default class Schema {
           } else { valid = false; break; }
         }
         if (valid && w % 3 === 0) return true;
+        // The eyes pair may not be the pongpong pair — recombine and try full check
+        const pairMeld = winner.down.find((meld) => {
+          const mt = meld.filter((t) => typeof t === "number");
+          return mt.length === 2;
+        });
+        const pairTiles = pairMeld.filter((t) => typeof t === "number").map((t) => this.tiles[t]);
+        const combined = [...handTiles, ...pairTiles];
+        const combinedNonWild = combined.filter((t) => !isW(t));
+        const combinedWilds = combined.length - combinedNonWild.length;
+        for (let i = 0; i < combinedNonWild.length; i++) {
+          if (combinedNonWild.slice(0, i).some((t) => eq(t, combinedNonWild[i]))) continue;
+          const cnt = combinedNonWild.filter((t) => eq(t, combinedNonWild[i])).length;
+          if (cnt >= 2) {
+            const rest = [];
+            let pairRemoved = 0;
+            for (const t of combinedNonWild) {
+              if (eq(t, combinedNonWild[i]) && pairRemoved < 2) { pairRemoved++; continue; }
+              rest.push(t);
+            }
+            let tr = [...rest];
+            let ww = combinedWilds;
+            let v = true;
+            while (tr.length > 0) {
+              const f = tr[0];
+              const c = tr.filter((t) => eq(t, f)).length;
+              if (c >= 3) {
+                let r = 0;
+                tr = tr.filter((t) => !(eq(t, f) && ++r <= 3));
+              } else if (c + ww >= 3) {
+                ww -= (3 - c);
+                tr = tr.filter((t) => !eq(t, f));
+              } else { v = false; break; }
+            }
+            if (v && ww % 3 === 0) return true;
+          }
+        }
+        if (combinedWilds >= 1 && combinedNonWild.length % 3 === 0) {
+          let tr = [...combinedNonWild];
+          let ww = combinedWilds - 1;
+          let v = true;
+          while (tr.length > 0) {
+            const f = tr[0];
+            const c = tr.filter((t) => eq(t, f)).length;
+            if (c >= 3) {
+              let r = 0;
+              tr = tr.filter((t) => !(eq(t, f) && ++r <= 3));
+            } else if (c + ww >= 3) {
+              ww -= (3 - c);
+              tr = tr.filter((t) => !eq(t, f));
+            } else { v = false; break; }
+          }
+          if (v && ww % 3 === 0) return true;
+        }
         return false;
       }
 

@@ -1,17 +1,45 @@
 <script context="module">
   const SUITS = ['Pin', 'Sou', 'Man', 'wind', 'dragon'];
   const VALUES = ['Ton', 'Nan', 'Shaa', 'Pei', 'Chun', 'Haku', 'Hatsu'];
-  
-  const suitOrder = (a, b) => SUITS.indexOf(a) - SUITS.indexOf(b);
+
+  function shuffleArray(arr) {
+    const a = [...arr];
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    return a;
+  }
+
+  const playerSuitOrders = {};
+  const playerWildSide = {};
+
+  function getSuitOrder(wind) {
+    if (!playerSuitOrders[wind]) {
+      const numbered = shuffleArray(['Pin', 'Sou', 'Man']);
+      const wildSide = Math.random() < 0.5 ? 'left' : 'right';
+      playerWildSide[wind] = wildSide;
+      if (wildSide === 'left') {
+        playerSuitOrders[wind] = ['_wild', ...numbered, 'wind', 'dragon'];
+      } else {
+        playerSuitOrders[wind] = [...numbered, '_wild', 'wind', 'dragon'];
+      }
+    }
+    return playerSuitOrders[wind];
+  }
+
   const valueOrder = (a, b) => typeof a === 'number'
     ? a - b
     : VALUES.indexOf(a) - VALUES.indexOf(b);
-  const order = (tiles, wildcard) => (a, b) => {
+  const order = (tiles, wildcard, wind) => (a, b) => {
     if (!tiles[a] || !tiles[b]) return 0;
+    const suits = getSuitOrder(wind);
     const aWild = wildcard && tiles[a].suit === wildcard.suit && tiles[a].value === wildcard.value;
     const bWild = wildcard && tiles[b].suit === wildcard.suit && tiles[b].value === wildcard.value;
-    if (aWild !== bWild) return aWild ? -1 : 1;
-    return suitOrder(tiles[a].suit, tiles[b].suit) || valueOrder(tiles[a].value, tiles[b].value);
+    const aSuit = aWild ? '_wild' : tiles[a].suit;
+    const bSuit = bWild ? '_wild' : tiles[b].suit;
+    const suitDiff = suits.indexOf(aSuit) - suits.indexOf(bSuit);
+    return suitDiff || valueOrder(tiles[a].value, tiles[b].value);
   };
   
   const pct = (amt, rev) => `${rev ? 'max' : 'min'}(${amt}vw, ${amt}vh)`;
@@ -190,7 +218,7 @@
         const position = handPosition(wind);
         let i = HAND_SIZE + 1;
         if (index !== store.drawn) {
-          i = [...store[wind].up.filter(x => x !== store.drawn)].sort(order(store.tiles, store.wildcard)).indexOf(index);
+          i = [...store[wind].up.filter(x => x !== store.drawn)].sort(order(store.tiles, store.wildcard, wind)).indexOf(index);
         }
         const horizontal = i * TILE_WIDTH;
         position.push(`translateX(${i * 3}px)`);
@@ -205,7 +233,7 @@
       } else if ([].concat(...store[wind].down).includes(index)) {
         const position = handPosition(wind);
         let i = store[wind].down.findIndex(meld => meld.includes(index));
-        let j = [...store[wind].down[i]].sort(order(store.tiles, store.wildcard)).indexOf(index);
+        let j = [...store[wind].down[i]].sort(order(store.tiles, store.wildcard, wind)).indexOf(index);
         let k = 0;
         if (j === 3) {
           j = 1;

@@ -1,6 +1,7 @@
 import { WINDS } from "../lib/schema.js";
 import Message from "../socket/message.js";
 import sockets from "./sockets.js";
+import { autoPlayAfterDraw, autoPlayAfterDiscard, isDisconnected } from "./autoplay.js";
 
 const votes = new WeakMap();
 
@@ -35,8 +36,13 @@ export function handle(socket, schema, votes) {
     case "Draw": {
       const [message, reveal] = schema.draw(winner);
       const winnerSocket = sockets.get(schema[winner].name);
-      winnerSocket.broadcast(message);
-      winnerSocket.send(message.subject, { ...message.body, reveal });
+      if (winnerSocket && winnerSocket.raw.connected) {
+        winnerSocket.broadcast(message);
+        winnerSocket.send(message.subject, { ...message.body, reveal });
+      } else {
+        socket.emit(message);
+        autoPlayAfterDraw(socket, schema);
+      }
       break;
     }
     case "Pong": {
@@ -52,11 +58,15 @@ export function handle(socket, schema, votes) {
     case "Kong": {
       const [message, reveal] = schema.exposedKong(winner);
       const winnerSocket = sockets.get(schema[winner].name);
-      winnerSocket.broadcast(message);
-      winnerSocket.send(message.subject, {
-        ...message.body,
-        reveal: [...message.body.reveal, reveal],
-      });
+      if (winnerSocket && winnerSocket.raw.connected) {
+        winnerSocket.broadcast(message);
+        winnerSocket.send(message.subject, {
+          ...message.body,
+          reveal: [...message.body.reveal, reveal],
+        });
+      } else {
+        socket.emit(message);
+      }
       break;
     }
     case "Eyes": {
@@ -80,6 +90,44 @@ export function cast(socket, schema, vote) {
   if (gameVotes[position]) return; // cannot vote twice
   gameVotes[position] = vote;
 
+  const remaining = WINDS.filter(
+    (wind) => schema[wind] && schema.previousTurn !== wind && !gameVotes[wind],
+  );
+
+  if (remaining.length === 0) {
+    votes.delete(schema);
+    handle(socket, schema, gameVotes);
+  } else {
+    votes.set(schema, gameVotes);
+    socket.emit(new Message("vote", { position, vote }));
+    for (const wind of remaining) {
+      if (isDisconnected(schema[wind].name)) {
+        castIgnoreForPlayer(socket, schema, wind);
+      }
+    }
+  }
+}
+
+export function emitCurrentVotes(socket, schema) {
+  const gameVotes = votes.get(schema);
+  if (!gameVotes) return;
+  Object.entries(gameVotes).forEach(([position, vote]) => {
+    socket.emit(new Message("vote", { position, vote }));
+  });
+}
+
+export function castIgnoreForPlayer(socket, schema, position) {
+  castAutoVoteForPlayer(socket, schema, position);
+}
+
+function castAutoVoteForPlayer(socket, schema, position) {
+  const gameVotes = votes.get(schema);
+  if (!gameVotes) return;
+  if (gameVotes[position]) return;
+
+  const vote = schema.turn === position ? new DrawVote() : new IgnoreVote();
+  gameVotes[position] = vote;
+
   const allCast = WINDS.filter(
     (wind) => schema[wind] && schema.previousTurn !== wind,
   ).every((wind) => gameVotes[wind]);
@@ -93,10 +141,14 @@ export function cast(socket, schema, vote) {
   }
 }
 
-export function emitCurrentVotes(socket, schema) {
-  const gameVotes = votes.get(schema);
-  if (!gameVotes) return;
-  Object.entries(gameVotes).forEach(([position, vote]) => {
-    socket.emit(new Message("vote", { position, vote }));
-  });
+class IgnoreVote extends Vote {
+  constructor() {
+    super("Ignore", 0);
+  }
+}
+
+class DrawVote extends Vote {
+  constructor() {
+    super("Draw", 1);
+  }
 }
