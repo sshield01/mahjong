@@ -297,11 +297,10 @@ export default class Schema {
 
     const wildcardCount = tiles.filter(isWild).length;
     const hasExposedWildcards = (player.exposedWildcards || []).length > 0;
-    if (wildcardCount >= 2 && !hasExposedWildcards) {
-      const isAllClear = player.down.length === 0;
-      if (!allSameKind() && !isAllClear) {
-        return false;
-      }
+	if (wildcardCount >= 2 && !hasExposedWildcards && !allSameKind()) {
+		return false;
+	}
+
     }
 
     function validEye(tile) {
