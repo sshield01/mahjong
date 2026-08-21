@@ -80,7 +80,7 @@ export default async function handler(
               } else {
                 socket.send("ignore").catch(() => {});
               }
-            }, schema.turn === myWind ? 2000 : 500);
+            }, 4000);
           } else {
             if (schema.turn === myWind) {
               socket.send("draw").catch(() => {});

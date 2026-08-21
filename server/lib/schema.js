@@ -987,22 +987,22 @@ export default class Schema {
     this.nextTurn();
     const discard = this.tiles[tile];
     const isWild = this.wildcard && eq(discard, this.wildcard);
-    const hasClaims = !isWild && WINDS.some((wind) => {
-      if (!this[wind] || wind === position) return false;
-      const hand = this[wind].up.map((t) => this.tiles[t]);
-      if (hand.filter((t) => eq(t, discard)).length >= 2) return true;
-      if (wind === this.turn && typeof discard.value === "number") {
-        const ofSuit = hand.filter((t) => t.suit === discard.suit && !(this.wildcard && eq(t, this.wildcard)));
-        const vals = ofSuit.map((t) => t.value);
-        if (vals.includes(discard.value - 2) && vals.includes(discard.value - 1)) return true;
-        if (vals.includes(discard.value - 1) && vals.includes(discard.value + 1)) return true;
-        if (vals.includes(discard.value + 1) && vals.includes(discard.value + 2)) return true;
+    let hasPongClaims = false;
+    if (!isWild) {
+      for (const wind of WINDS) {
+        if (!this[wind] || wind === position) continue;
+        const hand = this[wind].up.map((t) => this.tiles[t]);
+        if (wind !== this.turn) {
+          if (hand.filter((t) => eq(t, discard)).length >= 2) { hasPongClaims = true; break; }
+          const playerObj = { ...this[wind], up: [...this[wind].up, tile] };
+          if (Schema.winningHand(this, playerObj, tile)) { hasPongClaims = true; break; }
+        } else {
+          const playerObj = { ...this[wind], up: [...this[wind].up, tile] };
+          if (Schema.winningHand(this, playerObj, tile)) { hasPongClaims = true; break; }
+        }
       }
-      const playerObj = { ...this[wind], up: [...this[wind].up, tile] };
-      if (Schema.winningHand(this, playerObj, tile)) return true;
-      return false;
-    });
-    return new Message("discard", { position, tile, reveal: discard, hasClaims });
+    }
+    return new Message("discard", { position, tile, reveal: discard, hasClaims: hasPongClaims });
   }
 
   nextTurn() {
