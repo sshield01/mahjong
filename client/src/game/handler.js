@@ -161,19 +161,21 @@ export default async function handler(
         currentVotes.update((votes) => ({ ...votes, [position]: vote }));
         if (!get(timer)) {
           const myWind = schema.playerWind(socket.name);
-          timer.set({
-            start: Date.now(),
-            paused: false,
-            duration: TIMER_DURATION,
-            handle: window.setTimeout(async () => {
-              if (get(currentVotes)[myWind]) return;
-              try {
-                await socket.send(schema.turn === myWind ? "draw" : "ignore");
-              } catch (error) {
-                console.error(error);
-              }
-            }, TIMER_DURATION),
-          });
+          if (!hasActions(schema, myWind)) {
+            timer.set({
+              start: Date.now(),
+              paused: false,
+              duration: TIMER_DURATION,
+              handle: window.setTimeout(async () => {
+                if (get(currentVotes)[myWind]) return;
+                try {
+                  await socket.send(schema.turn === myWind ? "draw" : "ignore");
+                } catch (error) {
+                  console.error(error);
+                }
+              }, TIMER_DURATION),
+            });
+          }
         }
         break;
       }
