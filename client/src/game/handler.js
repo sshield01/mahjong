@@ -22,7 +22,9 @@ function hasActions(schema, myWind) {
   }
   const playerObj = { ...schema[myWind] };
   playerObj.up = [...hand, schema.discarded];
-  if (Schema.winningHand(schema, playerObj, schema.discarded)) return true;
+  // Don't force the discard as the eye here: that only catches a win where the
+  // discard completes the pair, missing a win where it completes a run (chow).
+  if (Schema.winningHand(schema, playerObj)) return true;
   return false;
 }
 
@@ -61,6 +63,8 @@ export default async function handler(
         break;
       }
       case "discard": {
+        window.clearTimeout((get(timer) || {}).handle);
+        timer.set(null);
         const { position, tile, reveal, hasClaims } = message.body;
         currentVotes.set({ [position]: { method: "Discard", priority: 0 } });
         schema.tiles[tile] = reveal;
@@ -72,21 +76,28 @@ export default async function handler(
         schema.nextTurn();
         store.set(schema);
         const myWind = schema.playerWind(socket.name);
-        if (position !== myWind && !hasActions(schema, myWind)) {
-          if (hasClaims) {
-            setTimeout(() => {
-              if (schema.turn === myWind) {
-                socket.send("draw").catch(() => {});
-              } else {
-                socket.send("ignore").catch(() => {});
-              }
-            }, 4000);
+        if (position !== myWind) {
+          // Fallback vote if I never act: draw on my own turn, otherwise ignore.
+          // This must stay a real vote (never a bare "ignore" for the turn player) since
+          // `Draw` is the one vote the server always knows how to resolve.
+          const fallback = () => {
+            if (get(currentVotes)[myWind]) return;
+            const action = schema.turn === myWind ? "draw" : "ignore";
+            socket.send(action).catch(() => {});
+          };
+          if (!hasActions(schema, myWind) && !hasClaims) {
+            // Nobody (including me) has any claim on this discard -- nothing to wait
+            // for, so keep the game moving instead of arming a pointless timer.
+            fallback();
           } else {
-            if (schema.turn === myWind) {
-              socket.send("draw").catch(() => {});
-            } else {
-              socket.send("ignore").catch(() => {});
-            }
+            // Either I have a real decision to make, or someone else might, so give
+            // this a pausable countdown -- the Wait/Ignore/Draw buttons act on it.
+            timer.set({
+              start: Date.now(),
+              paused: false,
+              duration: TIMER_DURATION,
+              handle: window.setTimeout(fallback, TIMER_DURATION),
+            });
           }
         }
         break;
@@ -159,24 +170,6 @@ export default async function handler(
       case "vote": {
         const { position, vote } = message.body;
         currentVotes.update((votes) => ({ ...votes, [position]: vote }));
-        if (!get(timer)) {
-          const myWind = schema.playerWind(socket.name);
-          if (schema.turn !== myWind) {
-            timer.set({
-              start: Date.now(),
-              paused: false,
-              duration: TIMER_DURATION,
-              handle: window.setTimeout(async () => {
-                if (get(currentVotes)[myWind]) return;
-                try {
-                  await socket.send("ignore");
-                } catch (error) {
-                  console.error(error);
-                }
-              }, TIMER_DURATION),
-            });
-          }
-        }
         break;
       }
       case "exposeWildcard": {

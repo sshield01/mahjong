@@ -247,6 +247,7 @@
           }
 
           if (index === storeValue.discarded && !myDiscard) {
+            const combos = [...new Set($selectionSets.map(set => JSON.stringify([...set.tiles].sort())))];
             if ($selectionSets.length === 1) {
               return async () => {
                 await $selectionSets[0].handler();
@@ -257,13 +258,21 @@
                   if (selecting) {
                     selection.set(new Set());
                     selecting = !selecting;
-                    await socket.send('ignore');
+                    await socket.send(myTurn ? 'draw' : 'ignore');
                   } else {
                     // Clear the timeout so we don't get penalized for slow clicking, but let's leave the timer value so it
                     // doesn't get reset
                     const { handle } = get(timer) || {};
                     if (handle) {
                       window.clearTimeout(handle);
+                    }
+                    if (combos.length === 1) {
+                      // Multiple labeled actions (e.g. Pong and Win) share the one
+                      // unambiguous set of tiles -- no need to make the player
+                      // re-click their own hand tiles just to choose between them;
+                      // select those tiles automatically and let the action buttons
+                      // (rendered once $selection matches) do the choosing.
+                      selection.set(new Set(JSON.parse(combos[0])));
                     }
                     selecting = !selecting;
                   }

@@ -9,7 +9,6 @@
     selectionSets,
     socket,
     store,
-    hasAction,
     timer,
   } = context();
 
@@ -51,7 +50,13 @@
   }
 
   async function cancel() {
-    await socket.send('ignore');
+    try {
+      // On my own turn, "decline and proceed" must be a Draw vote, never a bare
+      // Ignore -- Draw is the one vote the server always knows how to resolve.
+      await socket.send($store.turn === myWind ? 'draw' : 'ignore');
+    } catch (error) {
+      console.log(error);
+    }
   }
 
   async function kong(mode, tile) {
@@ -86,16 +91,15 @@
 
 <div class="container">
   <div class="actions">
-    {#if $hasAction && $timer && !$currentVotes[myWind]}
-      {#if $timer.paused}
-        <button class="action" on:click={cancel}>
-          Cancel Wait
-        </button>
-      {:else}
+    {#if $timer && !$currentVotes[myWind]}
+      {#if !$timer.paused}
         <button class="action" on:click={wait}>
           Wait
         </button>
       {/if}
+      <button class="action" on:click={cancel}>
+        {$store.turn === myWind ? 'Draw' : 'Ignore'}
+      </button>
     {/if}
     
     {#each actions as action}

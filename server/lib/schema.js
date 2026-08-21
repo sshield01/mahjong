@@ -994,7 +994,9 @@ export default class Schema {
         const hand = this[wind].up.map((t) => this.tiles[t]);
         if (hand.filter((t) => eq(t, discard)).length >= 2) { hasPongClaims = true; break; }
         const playerObj = { ...this[wind], up: [...this[wind].up, tile] };
-        if (Schema.winningHand(this, playerObj, tile)) { hasPongClaims = true; break; }
+        // Don't force `tile` as the eye here: that only detects a win where the
+        // discard completes the pair, missing a win where it completes a run (chow).
+        if (Schema.winningHand(this, playerObj)) { hasPongClaims = true; break; }
       }
     }
     return new Message("discard", { position, tile, reveal: discard, hasClaims: hasPongClaims });
