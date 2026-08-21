@@ -223,7 +223,7 @@
                   }
                 };
               }
-            } else if (index === toDraw) {
+            } else if (index === toDraw && !selecting) {
               return async () => {
                 try {
                   await socket.send('draw', {});

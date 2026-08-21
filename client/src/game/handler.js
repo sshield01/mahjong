@@ -91,6 +91,21 @@ export default async function handler(
             }
           }
         }
+        if (position !== myWind && hasClaims && hasActions(schema, myWind) && !get(timer)) {
+          timer.set({
+            start: Date.now(),
+            paused: false,
+            duration: TIMER_DURATION,
+            handle: window.setTimeout(async () => {
+              if (get(currentVotes)[myWind]) return;
+              try {
+                await socket.send(schema.turn === myWind ? "draw" : "ignore");
+              } catch (error) {
+                console.error(error);
+              }
+            }, TIMER_DURATION),
+          });
+        }
         break;
       }
       case "draw": {
