@@ -31,6 +31,7 @@ export default async function handler(
   { socket, store, timer, selection, selectionSets, currentVotes },
 ) {
   store.set(new Schema(schema));
+  let lastHasClaims = false;
   for (;;) {
     const message = await socket.recv();
 
@@ -62,6 +63,7 @@ export default async function handler(
       }
       case "discard": {
         const { position, tile, reveal, hasClaims } = message.body;
+        lastHasClaims = !!hasClaims;
         currentVotes.set({ [position]: { method: "Discard", priority: 0 } });
         schema.tiles[tile] = reveal;
         const index = schema[position].up.indexOf(tile);
@@ -152,14 +154,14 @@ export default async function handler(
       case "vote": {
         const { position, vote } = message.body;
         currentVotes.update((votes) => ({ ...votes, [position]: vote }));
-        if (!get(timer)) {
+        if (!get(timer) && lastHasClaims) {
           const myWind = schema.playerWind(socket.name);
           timer.set({
             start: Date.now(),
             paused: false,
             duration: TIMER_DURATION,
             handle: window.setTimeout(async () => {
-              if (get(currentVotes)[myWind]) return; // don't bother voting again
+              if (get(currentVotes)[myWind]) return;
               try {
                 await socket.send("ignore");
               } catch (error) {
