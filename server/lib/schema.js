@@ -323,6 +323,7 @@ export default class Schema {
         if (!validEye(tiles[i])) continue;
         for (let j = i + 1; j < tiles.length; j++) {
           if (!eq(tiles[i], tiles[j]) && !isWild(tiles[i]) && !isWild(tiles[j])) continue;
+          if (isWild(tiles[i]) && !isWild(tiles[j]) && !validEye(tiles[j])) continue;
           const remaining = [...tiles];
           remaining.splice(j, 1);
           remaining.splice(i, 1);
