@@ -259,8 +259,11 @@
         const j = i % DISCARD_SIZE;
         const k = Math.floor(i / DISCARD_SIZE);
         const horizontal = j * TILE_WIDTH;
-        const vertical = -k * TILE_HEIGHT;
-        position.push(`translate(${j * 3}px, ${-k * 3}px)`);
+        // Extra rows grow back toward this player's own hand, not toward the
+        // table's center -- otherwise, in a long hand, four independently-growing
+        // discard piles converge and overlap in the middle of the table.
+        const vertical = k * TILE_HEIGHT;
+        position.push(`translate(${j * 3}px, ${k * 3}px)`);
         position.push(`translate(${pct(horizontal)}, ${pct(vertical, true)})`);
         return `transform: ${position.join(' ')}`;
       }

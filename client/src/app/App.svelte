@@ -27,6 +27,7 @@
   const PLAY = Symbol();
   const CREATE = Symbol();
   const JOIN = Symbol();
+  const RECONNECTING = Symbol();
 
   function getRoomFromUrl() {
     const hash = window.location.hash.slice(1);
@@ -75,24 +76,67 @@
 
   let state = null;
 
+  function giveUpSession() {
+    localStorage.removeItem('mahjong_session');
+    state = getRoomFromUrl() ? JOIN : CREATE;
+  }
+
+  // A previous connection under the same name (e.g. a tab that was just refreshed)
+  // may not be cleaned up on the server yet. Once the initial `reconnect` fails,
+  // the server is permanently waiting for `identification` on this connection
+  // instead -- resending `reconnect` would just hang -- so retry by re-identifying
+  // with the saved name a few times before giving up on the session entirely.
+  const RECONNECT_RETRY_DELAYS = [500, 1000, 2000, 4000];
+
   async function tryReconnect() {
     const saved = localStorage.getItem('mahjong_session');
     if (!saved) {
       state = getRoomFromUrl() ? JOIN : CREATE;
       return;
     }
+    const { token, name: savedName, room: savedRoom } = JSON.parse(saved);
     try {
-      const { token } = JSON.parse(saved);
       const result = await socket.send('reconnect', { token });
       socket.name = result.name;
       name = result.name;
       window.location.hash = result.room;
       handler(result.schema, ctx);
       state = PLAY;
+      return;
     } catch (error) {
-      localStorage.removeItem('mahjong_session');
-      state = getRoomFromUrl() ? JOIN : CREATE;
+      if (error !== 'Already connected.') {
+        giveUpSession();
+        return;
+      }
     }
+
+    state = RECONNECTING;
+    // Once identification succeeds, the server is permanently parked waiting for
+    // `location` on this connection -- a repeated `identification` message would
+    // just hang unanswered -- so only resend the step that hasn't succeeded yet.
+    let identified = false;
+    for (const delay of RECONNECT_RETRY_DELAYS) {
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      try {
+        if (!identified) {
+          await socket.send('identification', { name: savedName });
+          socket.name = savedName;
+          name = savedName;
+          identified = true;
+        }
+        const { schema, token: newToken } = await socket.send('location', { room: savedRoom });
+        if (newToken) {
+          localStorage.setItem('mahjong_session', JSON.stringify({ token: newToken, name: savedName, room: savedRoom }));
+        }
+        window.location.hash = savedRoom;
+        handler(schema, ctx);
+        state = PLAY;
+        return;
+      } catch (error) {
+        // Keep retrying until the stale connection clears or we run out of attempts.
+      }
+    }
+    giveUpSession();
   }
 
   tryReconnect();
@@ -162,6 +206,12 @@
 {#if state === PLAY}
   <div class="layer">
     <Status />
+  </div>
+{:else if state === RECONNECTING}
+  <div class="layer full title">
+    <Title>
+      <div class="form info">Reconnecting...</div>
+    </Title>
   </div>
 {:else if state === CREATE || state === JOIN}
   <div class="layer full title">
