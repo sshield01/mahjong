@@ -168,7 +168,7 @@ export default async function handler(
             handle: window.setTimeout(async () => {
               if (get(currentVotes)[myWind]) return;
               try {
-                await socket.send("ignore");
+                await socket.send(schema.turn === myWind ? "draw" : "ignore");
               } catch (error) {
                 console.error(error);
               }
