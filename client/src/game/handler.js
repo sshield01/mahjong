@@ -1,7 +1,7 @@
 import Schema, { player, eq } from "../lib/schema.js";
 import { get } from "svelte/store";
 
-const TIMER_DURATION = 2000;
+const TIMER_DURATION = 4000;
 
 function hasActions(schema, myWind) {
   if (!schema.discarded && schema.discarded !== 0) return false;
@@ -161,7 +161,7 @@ export default async function handler(
         currentVotes.update((votes) => ({ ...votes, [position]: vote }));
         if (!get(timer)) {
           const myWind = schema.playerWind(socket.name);
-          if (!hasActions(schema, myWind)) {
+          if (schema.turn !== myWind) {
             timer.set({
               start: Date.now(),
               paused: false,
@@ -169,7 +169,7 @@ export default async function handler(
               handle: window.setTimeout(async () => {
                 if (get(currentVotes)[myWind]) return;
                 try {
-                  await socket.send(schema.turn === myWind ? "draw" : "ignore");
+                  await socket.send("ignore");
                 } catch (error) {
                   console.error(error);
                 }
