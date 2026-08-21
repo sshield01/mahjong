@@ -28,8 +28,11 @@
 
 <style>
   .wildcard-info {
+    /* Sits below CurrentWind, which docks to the same top-right corner
+       (top: 0; padding: clamp(12px, 3vw, 32px); font-size: clamp(16pt, 4vw, 24pt)).
+       Offset clears that box's worst-case height so the two never overlap. */
     position: fixed;
-    top: clamp(8px, 2vh, 10vh);
+    top: clamp(64px, 16vh, 130px);
     right: clamp(8px, 3vw, 10vw);
     display: flex;
     flex-direction: column;

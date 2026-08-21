@@ -132,7 +132,7 @@ export default (io, stateDirectory) => {
         schemas = await loadSchema(room);
         schema = schemas[schemas.length - 1];
       } catch (error) {
-        location.fail(error);
+        location.fail(error.message || String(error));
         continue;
       }
 

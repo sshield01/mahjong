@@ -992,14 +992,9 @@ export default class Schema {
       for (const wind of WINDS) {
         if (!this[wind] || wind === position) continue;
         const hand = this[wind].up.map((t) => this.tiles[t]);
-        if (wind !== this.turn) {
-          if (hand.filter((t) => eq(t, discard)).length >= 2) { hasPongClaims = true; break; }
-          const playerObj = { ...this[wind], up: [...this[wind].up, tile] };
-          if (Schema.winningHand(this, playerObj, tile)) { hasPongClaims = true; break; }
-        } else {
-          const playerObj = { ...this[wind], up: [...this[wind].up, tile] };
-          if (Schema.winningHand(this, playerObj, tile)) { hasPongClaims = true; break; }
-        }
+        if (hand.filter((t) => eq(t, discard)).length >= 2) { hasPongClaims = true; break; }
+        const playerObj = { ...this[wind], up: [...this[wind].up, tile] };
+        if (Schema.winningHand(this, playerObj, tile)) { hasPongClaims = true; break; }
       }
     }
     return new Message("discard", { position, tile, reveal: discard, hasClaims: hasPongClaims });
