@@ -83,9 +83,8 @@ export function handle(socket, schema, votes) {
 }
 
 export function cast(socket, schema, vote) {
-  let gameVotes = votes.get(schema);
-  if (vote.method === "Ignore" && !gameVotes) return; // discard must be the first vote
-  gameVotes = gameVotes || {};
+  if (schema.discarded === undefined) return;
+  let gameVotes = votes.get(schema) || {};
   const position = schema.playerWind(socket.name);
   if (gameVotes[position]) return; // cannot vote twice
   gameVotes[position] = vote;

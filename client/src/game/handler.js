@@ -75,14 +75,21 @@ export default async function handler(
         store.set(schema);
         const myWind = schema.playerWind(socket.name);
         if (position !== myWind && !hasActions(schema, myWind)) {
-          const delay = hasClaims ? (schema.turn === myWind ? 2000 : 500) : 0;
-          setTimeout(() => {
+          if (hasClaims) {
+            setTimeout(() => {
+              if (schema.turn === myWind) {
+                socket.send("draw").catch(() => {});
+              } else {
+                socket.send("ignore").catch(() => {});
+              }
+            }, schema.turn === myWind ? 2000 : 500);
+          } else {
             if (schema.turn === myWind) {
               socket.send("draw").catch(() => {});
             } else {
               socket.send("ignore").catch(() => {});
             }
-          }, delay);
+          }
         }
         break;
       }

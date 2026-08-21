@@ -990,6 +990,13 @@ export default class Schema {
       if (!this[wind] || wind === position) return false;
       const hand = this[wind].up.map((t) => this.tiles[t]);
       if (hand.filter((t) => eq(t, discard)).length >= 2) return true;
+      if (wind === this.turn && typeof discard.value === "number") {
+        const ofSuit = hand.filter((t) => t.suit === discard.suit && !(this.wildcard && eq(t, this.wildcard)));
+        const vals = ofSuit.map((t) => t.value);
+        if (vals.includes(discard.value - 2) && vals.includes(discard.value - 1)) return true;
+        if (vals.includes(discard.value - 1) && vals.includes(discard.value + 1)) return true;
+        if (vals.includes(discard.value + 1) && vals.includes(discard.value + 2)) return true;
+      }
       const playerObj = { ...this[wind], up: [...this[wind].up, tile] };
       if (Schema.winningHand(this, playerObj, tile)) return true;
       return false;
