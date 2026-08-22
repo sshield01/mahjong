@@ -7,6 +7,15 @@ const SUITS = ["Pin", "Sou", "Man"];
 const NEXT_WIND = { Ton: "Nan", Nan: "Shaa", Shaa: "Pei", Pei: "Ton" };
 const PREV_WIND = { Nan: "Ton", Shaa: "Nan", Pei: "Shaa", Ton: "Pei" };
 
+const TURN_ORDER = ["Ton", "Nan", "Shaa", "Pei"];
+
+// The dealer is the first *occupied* seat in turn order. It used to be safe to
+// assume that was always Ton, because seats were filled sequentially from Ton;
+// now that players pick their own seat, Ton may be empty.
+function dealerSeat(schema) {
+  return TURN_ORDER.find((position) => schema[position]);
+}
+
 const HONOR_CYCLE = ["Ton", "Nan", "Shaa", "Pei", "Chun", "Hatsu", "Haku"];
 const NEXT_HONOR = Object.fromEntries(HONOR_CYCLE.map((h, i) => [h, HONOR_CYCLE[(i + 1) % HONOR_CYCLE.length]]));
 const HONOR_SUIT = { Ton: "wind", Nan: "wind", Shaa: "wind", Pei: "wind", Chun: "dragon", Hatsu: "dragon", Haku: "dragon" };
@@ -135,7 +144,9 @@ export default class Schema {
       wind: previous.wind,
       scores: previous.scores || {},
     };
-    if (previous.completed && previous.turn === "Ton") {
+    // Dealer keeps the deal when they win -- compare against the actual dealer
+    // seat, which is not necessarily Ton now that seats are chosen freely.
+    if (previous.completed && previous.turn === dealerSeat(previous)) {
       for (const position of WINDS) {
         if (previous[position]) {
           basis[position] = player(previous[position].name);
@@ -153,7 +164,12 @@ export default class Schema {
       }
       // After each position has been played by a player, change the prevailing
       // wind and continue
-      if (basis.Ton.name === initial.Ton.name) {
+      const nextDealer = dealerSeat(basis);
+      const firstDealer = dealerSeat(initial);
+      if (
+        nextDealer && firstDealer &&
+        basis[nextDealer].name === initial[firstDealer].name
+      ) {
         // Technically if we have reached Ton again, then the game should be done..?
         // I don't think that really matters to us though.
         basis.wind = NEXT_WIND[basis.wind];
@@ -398,9 +414,13 @@ export default class Schema {
     ];
 
     let [wall, stack] = this.nextDraw();
-    const winds = ["Ton", "Nan", "Shaa", "Pei"].filter(
-      (position) => this[position],
-    );
+    const winds = TURN_ORDER.filter((position) => this[position]);
+    // The 14th tile goes to winds[0], so the turn must point there too. Without
+    // this, `turn` keeps its "Ton" default -- and if nobody took the Ton seat it
+    // names an empty seat, so no client ever has `myTurn` and the game freezes
+    // before the first discard.
+    this.turn = winds[0];
+    this.previousTurn = winds[0];
     for (let i = 0; i < 3; ++i) {
       for (const position of winds) {
         for (let j = 0; j < 2; ++j) {
