@@ -6,7 +6,7 @@
 
   export let tableAngle;
 
-  const { selection, selectionSets, socket, store, timer, hasAction } = context();
+  const { selection, selectionSets, socket, store, timer, hasAction, discardAction } = context();
 
   let discarded;
   $: discarded = $store && $store.tiles[$store.discarded];
@@ -292,6 +292,13 @@
   }
 
   $: $hasAction = !myTurn && $selectionSets.length;
+
+  // Mirror the discard tile's own click handler onto the DiscardInfo indicator, so
+  // a claim can be made from the big tile at the top of the screen instead of
+  // picking the small one out of the pile. Same handler, so identical behaviour.
+  $: $discardAction = ($store && !$store.completed && $store.discarded !== undefined && handlers)
+    ? (handlers[$store.discarded] || null)
+    : null;
 </script>
 
 {#if $store}

@@ -12,6 +12,10 @@ export function init(socket) {
     selectionSets: writable([]),
     currentVotes: writable({}),
     hasAction: writable(false),
+    // The click handler for the current discard, published by Tiles.svelte so the
+    // DiscardInfo tile can offer the same claim without hunting for the small
+    // tile buried in the discard pile. Null when there is nothing to claim.
+    discardAction: writable(null),
   });
 
   window.schema = () => get(store);
