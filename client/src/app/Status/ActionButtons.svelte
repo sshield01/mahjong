@@ -85,14 +85,12 @@
     }
   }
 
-  // Whether I still owe a vote on the current discard. This must NOT depend on
-  // `$timer`: a player holding a claim (pong/kong/win) deliberately gets no
-  // countdown, and gating the decline button on the timer left them with no way
-  // to pass at all -- the round then waits on their vote forever.
-  $: canVote = $store && myWind &&
-    $store.discarded !== undefined &&
-    $store.previousTurn !== myWind &&
-    !$currentVotes[myWind];
+  // `$timer` is the single signal here: the discard handler only arms it for a
+  // non-turn player who actually holds a claim, so seats with nothing to decide
+  // stay button-free. `wait()` keeps the timer object and only clears its handle,
+  // so 过 survives pausing -- a claim holder must always be able to pass, or the
+  // round waits on their vote forever.
+  $: canVote = $timer && myWind && !$currentVotes[myWind];
 
   $: canExposeWildcard = $store && $store.drawn !== undefined && $store.turn === myWind &&
     $store.wildcard && $store[myWind].down.length > 0 &&
@@ -103,7 +101,7 @@
 <div class="container">
   <div class="actions">
     {#if canVote}
-      {#if $timer && !$timer.paused}
+      {#if !$timer.paused}
         <button class="action" on:click={wait}>
           想想
         </button>

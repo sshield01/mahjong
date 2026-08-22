@@ -7,11 +7,15 @@ function hasActions(schema, myWind) {
   if (!myWind) return false; // a spectator has no hand to act with
   if (!schema.discarded && schema.discarded !== 0) return false;
   if (schema.previousTurn === myWind) return false;
+  // Tiles this client isn't allowed to see are null, so every read here has to
+  // tolerate that. A throw would escape the handler's `for(;;)` loop and kill
+  // this client's message processing for good -- indistinguishable from a freeze.
   const discard = schema.tiles[schema.discarded];
-  const isWild = (t) => schema.wildcard && eq(t, schema.wildcard);
+  if (!discard) return false;
+  const isWild = (t) => t && schema.wildcard && eq(t, schema.wildcard);
   if (isWild(discard)) return false;
   const hand = schema[myWind].up;
-  const handTiles = hand.map(t => schema.tiles[t]);
+  const handTiles = hand.map(t => schema.tiles[t]).filter(Boolean);
   const matching = handTiles.filter(t => eq(t, discard));
   if (matching.length >= 2) return true;
   if (schema.turn === myWind && typeof discard.value === 'number') {
@@ -25,7 +29,9 @@ function hasActions(schema, myWind) {
   playerObj.up = [...hand, schema.discarded];
   // Don't force the discard as the eye here: that only catches a win where the
   // discard completes the pair, missing a win where it completes a run (chow).
-  if (Schema.winningHand(schema, playerObj)) return true;
+  try {
+    if (Schema.winningHand(schema, playerObj)) return true;
+  } catch (e) {}
   return false;
 }
 
@@ -86,23 +92,32 @@ export default async function handler(
             const action = schema.turn === myWind ? "draw" : "ignore";
             socket.send(action).catch(() => {});
           };
-          if (!hasActions(schema, myWind) && !hasClaims) {
-            // Nobody (including me) has any claim on this discard -- nothing to wait
-            // for, so keep the game moving instead of arming a pointless timer.
+          const iHaveClaim = hasActions(schema, myWind);
+          if (schema.turn === myWind && (iHaveClaim || hasClaims)) {
+            // My turn and something to weigh: no auto-vote at all. I act through
+            // the table itself -- click the wall to draw, or the discard to
+            // chow/pong/win -- so there is no clock on my decision.
+          } else if (schema.turn === myWind) {
+            // My turn, nothing to weigh: just draw and keep the game moving.
             fallback();
-          } else {
-            // Either I have a real decision, or someone else might. Arm the
-            // countdown either way, so 想想 (pause) and 过 (decline) always appear
-            // together -- a claim holder needs the pause button most of all, and
-            // gating it on "no claim" put the two buttons on different players'
-            // screens. Pausing stops the auto-vote entirely, so there is no time
-            // pressure on whoever actually has to decide.
+          } else if (iHaveClaim) {
+            // My own claim. `timer.set` is what makes 想想/过 appear, so this is
+            // the one case that gets a visible, pausable countdown.
             timer.set({
               start: Date.now(),
               paused: false,
               duration: TIMER_DURATION,
               handle: window.setTimeout(fallback, TIMER_DURATION),
             });
+          } else if (hasClaims) {
+            // Someone else may claim, but I have nothing to decide. Delay my
+            // auto-vote so their claim isn't cut off -- deliberately a bare
+            // setTimeout rather than `timer.set`, so no buttons appear on a seat
+            // with no decision to make.
+            window.setTimeout(fallback, TIMER_DURATION);
+          } else {
+            // Nobody has any claim on this discard -- keep things moving.
+            fallback();
           }
         }
         break;

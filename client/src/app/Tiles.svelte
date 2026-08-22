@@ -53,7 +53,11 @@
     if (discarded) {
       const player = { ...storeValue[myWind] };
       player.up = [...player.up, storeValue.discarded];
-      canWin = Schema.winningHand(storeValue, player, storeValue.discarded);
+      // The eye-constrained form only finds wins where the discard completes the
+      // pair; the unconstrained form also catches it completing a run (chow).
+      // Both are needed, or 胡 never offers on a chow-shaped winning hand.
+      canWin = Schema.winningHand(storeValue, player, storeValue.discarded)
+        || Schema.winningHand(storeValue, player);
     } else {
       canWin = false;
     }
