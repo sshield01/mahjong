@@ -93,12 +93,16 @@ export default async function handler(
             socket.send(action).catch(() => {});
           };
           const iHaveClaim = hasActions(schema, myWind);
-          if (schema.turn === myWind && (iHaveClaim || hasClaims)) {
-            // My turn and something to weigh: no auto-vote at all. I act through
-            // the table itself -- click the wall to draw, or the discard to
-            // chow/pong/win -- so there is no clock on my decision.
+          if (schema.turn === myWind && iHaveClaim) {
+            // My turn and a real choice of my own (chow/pong/win): no auto-vote,
+            // no clock. I act through the table -- click the wall to draw, or the
+            // discard to claim it.
           } else if (schema.turn === myWind) {
-            // My turn, nothing to weigh: just draw and keep the game moving.
+            // My turn but nothing to weigh, so vote Draw straight away even when
+            // someone else holds a claim. It pre-empts nobody: the round still
+            // waits for every seat, and Pong/Kong/Win outrank Draw at resolution.
+            // Waiting on `hasClaims` here just stalled the round -- the pong could
+            // not complete until I manually clicked the wall.
             fallback();
           } else if (iHaveClaim) {
             // My own claim. `timer.set` is what makes 想想/过 appear, so this is
