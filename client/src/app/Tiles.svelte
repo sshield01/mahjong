@@ -12,7 +12,7 @@
   $: discarded = $store && $store.tiles[$store.discarded];
 
   let myWind;
-  $: myWind = $store && $store.playerWind(socket.name);
+  $: myWind = $store && $store.seatOf(socket.name);
 
   let myTurn;
   $: myTurn = $store && $store.turn === myWind;

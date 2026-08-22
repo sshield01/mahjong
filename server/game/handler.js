@@ -1,5 +1,5 @@
 import AsyncSocket, { Disconnect } from "../socket/socket.js";
-import Schema from "../lib/schema.js";
+import Schema, { WINDS } from "../lib/schema.js";
 import Fs from "fs";
 import Crypto from "crypto";
 import sockets from "./sockets.js";
@@ -69,11 +69,8 @@ export default (io, stateDirectory) => {
         return null;
       }
       const schema = schemas[schemas.length - 1];
-      if (!schema.hasPlayer(name)) {
-        message.fail("Player not in game.");
-        sessions.delete(token);
-        return null;
-      }
+      // `name` may be a spectator with no seat -- that's fine, a valid session
+      // token is enough to rejoin either way.
       socket.identify(name);
       sockets.set(name, socket);
       socket.join(room);
@@ -136,25 +133,14 @@ export default (io, stateDirectory) => {
         continue;
       }
 
-      if (!schema.hasPlayer(name)) {
-        if (schema.started || schemas.length > 1) {
-          location.fail(`The game ${room} has started without you.`);
-          continue;
-        }
-        if (!schema.hasSpace()) {
-          location.fail(`The game ${room} is already full.`);
-          continue;
-        }
-      }
-
+      // Joining a room always succeeds, seated or not -- a full or in-progress
+      // game is watched as a spectator instead of being rejected. Claiming an
+      // actual seat is a separate, explicit `takeSeat` action.
       const token = Crypto.randomBytes(16).toString("hex");
       sessions.set(token, { name, room });
 
       socket.join(room);
       playersInGame.set(schemas, playersInGame.get(schemas) + 1);
-      if (!schema.hasPlayer(name)) {
-        socket.broadcast(schema.addPlayer(name));
-      }
 
       location.success({ schema: Schema.concealed(schema, name), token });
       return [room, schemas, token];
@@ -185,6 +171,19 @@ export default (io, stateDirectory) => {
           ++n;
           if (schemas.length === n) {
             schemas.push(Schema.nextGame(schema, schemas[0]));
+            // Seated players each pull the next-game schema by clicking "play
+            // again" themselves, same as before. Spectators have no such button,
+            // so without this they'd be stuck looking at the finished game
+            // forever -- push the fresh (not-yet-started) lobby to them instead.
+            const nextSchema = schemas[n];
+            const seatedNames = new Set(
+              WINDS.filter((position) => nextSchema[position]).map((position) => nextSchema[position].name),
+            );
+            for (const [viewerName, viewerSocket] of sockets) {
+              if (seatedNames.has(viewerName)) continue;
+              if (viewerSocket.game !== room) continue;
+              viewerSocket.send("start", Schema.concealed(nextSchema, viewerName));
+            }
           }
           schema = schemas[n];
           message.success({ schema: Schema.concealed(schema, name) });
@@ -211,7 +210,8 @@ export default (io, stateDirectory) => {
           markDisconnected(name);
         }
         if (schema && schema.started && !schema.completed) {
-          const position = schema.playerWind(name);
+          // A disconnecting spectator has no seat -- nothing to autoplay/ignore for.
+          const position = schema.seatOf(name);
           if (position) {
             if (schema.turn === position && schema.drawn !== undefined) {
               autoPlayAfterDraw(socket, schema);
@@ -235,7 +235,9 @@ export default (io, stateDirectory) => {
       }
       if (schemas) {
         playersInGame.set(schemas, playersInGame.get(schemas) - 1);
-        if (!schema.started) {
+        // A disconnecting spectator never held a seat -- only affects the
+        // room's connection count (handled above), nothing to clean up here.
+        if (!schema.started && schema.hasPlayer(name)) {
           if (schemas.length === 1) {
             socket.broadcast(schema.removePlayer(name));
           } else {

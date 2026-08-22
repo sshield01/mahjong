@@ -1,7 +1,7 @@
 <script>
   import context from '../../game/context.js';
 
-  const { store } = context();
+  const { socket, store } = context();
 
   const CHARACTER = {
     Pei: '北',
@@ -11,11 +11,25 @@
   };
 
   export let order;
+  export let mySeat = null;
+
+  $: canPick = !mySeat && !$store.started;
+
+  async function takeSeat(position) {
+    try {
+      await socket.send('takeSeat', { position });
+    } catch (error) {
+      console.error(error);
+    }
+  }
 </script>
 
 <div class="container">
   {#each order as position}
-    <div class="player">
+    <div
+      class="player {canPick && !$store[position] ? 'open' : ''}"
+      on:click={() => canPick && !$store[position] && takeSeat(position)}
+    >
       {#if $store[position]}
         <span class="name">{$store[position].name}</span>
         {#if $store[position].ready && !$store.started}
@@ -45,6 +59,19 @@
     position: relative;
     border: 1px solid rgba(255, 255, 255, 0.25);
     background: rgba(255, 255, 255, 0.12);
+  }
+
+  .player.open {
+    cursor: pointer;
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  .player.open .icon {
+    color: rgba(255, 255, 255, 0.35);
+  }
+
+  .player.open:hover {
+    background: rgba(255, 255, 255, 0.3);
   }
 
   .name, .icon, .ready {

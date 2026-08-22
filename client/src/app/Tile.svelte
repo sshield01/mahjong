@@ -167,7 +167,7 @@
     }
   };
 
-  $: myWind = $store && $store.playerWind(socket.name);
+  $: myWind = $store && $store.seatOf(socket.name);
   $: isWildcard = tile && $store && $store.wildcard && eq(tile, $store.wildcard);
 
   function calcPosition(store) {

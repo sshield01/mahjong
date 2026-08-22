@@ -19,12 +19,17 @@
     Nan: ['Pei', 'Shaa', 'Ton', 'Nan'],
     Pei: ['Nan', 'Ton', 'Shaa', 'Pei'],
   };
+  const DEFAULT_ORDER = ['Ton', 'Nan', 'Shaa', 'Pei'];
+
+  $: mySeat = $store.seatOf(socket.name);
 </script>
 
 {#if $store.started}
   <Timer />
   {#if !$store.completed}
-    <ActionButtons />
+    {#if mySeat}
+      <ActionButtons />
+    {/if}
   {:else}
     <GameEnd />
   {/if}
@@ -38,7 +43,9 @@
   <ScoreBoard />
   <CurrentVotes />
 {:else}
-  <PlayerList order={ORDER[$store.playerWind(socket.name)]} />
-  <ReadyButton />
+  <PlayerList order={mySeat ? ORDER[mySeat] : DEFAULT_ORDER} {mySeat} />
+  {#if mySeat}
+    <ReadyButton />
+  {/if}
 {/if}
 

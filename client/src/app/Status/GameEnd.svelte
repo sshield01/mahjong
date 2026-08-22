@@ -209,6 +209,8 @@
     const { schema } = await socket.send('playAgain');
     $store = new Schema(schema);
   }
+
+  $: mySeat = $store.seatOf(socket.name);
 </script>
 
 <div class="container">
@@ -244,11 +246,13 @@
     </div>
   {/if}
 
-  <button
-    class="play-again"
-    on:click={playAgain}>
-    再来一局
-  </button>
+  {#if mySeat}
+    <button
+      class="play-again"
+      on:click={playAgain}>
+      再来一局
+    </button>
+  {/if}
 </div>
 
 <style>

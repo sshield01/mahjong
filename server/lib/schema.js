@@ -113,8 +113,11 @@ export default class Schema {
       const down = WINDS.map((position) => schema[position])
         .filter((player) => !!player)
         .map((player) => [...player.discarded, ...[].concat(...player.down), ...(player.exposedWildcards || [])]);
-      const position = schema.playerWind(player);
-      const revealed = [...schema[position].up, ...[].concat(...down)];
+      // `player` may be a spectator with no seat -- reveal nothing of their own
+      // (there is no "own hand" to show) rather than treating that as an error.
+      const position = schema.seatOf(player);
+      const own = position ? schema[position].up : [];
+      const revealed = [...own, ...[].concat(...down)];
       if (schema.indicator !== undefined) {
         revealed.push(schema.indicator);
       }
@@ -368,10 +371,17 @@ export default class Schema {
     );
   }
 
-  playerWind(name) {
-    const position = WINDS.find(
+  // Like `playerWind`, but returns `undefined` instead of throwing when `name`
+  // isn't seated -- for call sites that need to tolerate an unseated viewer
+  // (spectators) rather than treat it as an invalid/forbidden action.
+  seatOf(name) {
+    return WINDS.find(
       (position) => this[position] && this[position].name === name,
     );
+  }
+
+  playerWind(name) {
+    const position = this.seatOf(name);
     if (!position) {
       throw new Error(`No player ${name} in game ${this.game}`);
     }
@@ -429,15 +439,19 @@ export default class Schema {
     this.wildcard = nextTileType(this.tiles[this.indicator]);
   }
 
-  addPlayer(name) {
+  addPlayer(name, position) {
     this.assertStarted(false);
-    for (const position of WINDS) {
-      if (!this[position]) {
-        this[position] = player(name);
-        return new Message("addPlayer", { position, name });
-      }
+    if (!WINDS.includes(position)) {
+      throw new Error(`${position} is not a valid seat.`);
     }
-    throw new Error(`The game ${this.name} is full.`);
+    if (this[position]) {
+      throw new Error(`That seat is already taken.`);
+    }
+    if (this.hasPlayer(name)) {
+      throw new Error(`${name} already has a seat.`);
+    }
+    this[position] = player(name);
+    return new Message("addPlayer", { position, name });
   }
 
   removePlayer(name) {
@@ -966,6 +980,18 @@ export default class Schema {
     const allFromOthers = false;
     this.updateScores(position);
     return new Message("win", { position, reveal: this.tiles, kong, allClear, allFromOthers, scores: this.scores });
+  }
+
+  // Could `position` win by claiming the currently pending discard (any shape:
+  // eyes, chow, or pong)? Used to decide whether a vote round can resolve a win
+  // immediately rather than waiting on other seats whose votes could never
+  // outrank it.
+  couldWin(position) {
+    if (this.discarded === undefined) return false;
+    const discard = this.tiles[this.discarded];
+    if (this.wildcard && eq(discard, this.wildcard)) return false;
+    const playerObj = { ...this[position], up: [...this[position].up, this.discarded] };
+    return Schema.winningHand(this, playerObj);
   }
 
   discard(name, tile) {

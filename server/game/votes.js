@@ -93,7 +93,13 @@ export function cast(socket, schema, vote) {
     (wind) => schema[wind] && schema.previousTurn !== wind && !gameVotes[wind],
   );
 
-  if (remaining.length === 0) {
+  // A win is the highest possible priority, so once one is cast, no vote still
+  // to come could ever outrank it -- UNLESS one of the remaining seats could
+  // *also* win on this same discard, in which case we still need their vote to
+  // correctly tie-break between simultaneous winners by turn order.
+  const decisive = vote.win && remaining.every((wind) => !schema.couldWin(wind));
+
+  if (remaining.length === 0 || decisive) {
     votes.delete(schema);
     handle(socket, schema, gameVotes);
   } else {

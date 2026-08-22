@@ -4,6 +4,7 @@ import { get } from "svelte/store";
 const TIMER_DURATION = 4000;
 
 function hasActions(schema, myWind) {
+  if (!myWind) return false; // a spectator has no hand to act with
   if (!schema.discarded && schema.discarded !== 0) return false;
   if (schema.previousTurn === myWind) return false;
   const discard = schema.tiles[schema.discarded];
@@ -75,8 +76,12 @@ export default async function handler(
         delete schema.drawn;
         schema.nextTurn();
         store.set(schema);
-        const myWind = schema.playerWind(socket.name);
-        if (position !== myWind) {
+        const myWind = schema.seatOf(socket.name);
+        // If I have a real decision to make (chow/pong/kong/win), there is no
+        // forced timer -- same as chow already worked: it's on me to act via the
+        // actual game UI whenever I'm ready, and nobody else's vote is blocked by
+        // my deliberation (resolution waits for every seat's vote regardless).
+        if (myWind && position !== myWind && !hasActions(schema, myWind)) {
           // Fallback vote if I never act: draw on my own turn, otherwise ignore.
           // This must stay a real vote (never a bare "ignore" for the turn player) since
           // `Draw` is the one vote the server always knows how to resolve.
@@ -85,13 +90,14 @@ export default async function handler(
             const action = schema.turn === myWind ? "draw" : "ignore";
             socket.send(action).catch(() => {});
           };
-          if (!hasActions(schema, myWind) && !hasClaims) {
+          if (!hasClaims) {
             // Nobody (including me) has any claim on this discard -- nothing to wait
             // for, so keep the game moving instead of arming a pointless timer.
             fallback();
           } else {
-            // Either I have a real decision to make, or someone else might, so give
-            // this a pausable countdown -- the Wait/Ignore/Draw buttons act on it.
+            // I have no action of my own, but someone else might -- give this a
+            // pausable grace period before falling back, so their claim isn't cut
+            // off by my (or the next-turn player's) auto-vote firing too soon.
             timer.set({
               start: Date.now(),
               paused: false,

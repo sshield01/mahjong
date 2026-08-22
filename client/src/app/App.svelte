@@ -192,7 +192,7 @@
 <div class="layer full">
   <Table
     angle={state === PLAY ? tableAngle : 0}
-    rotation={$store ? ['Ton', 'Nan', 'Shaa', 'Pei'].indexOf($store.playerWind(name)) * 90 : 0}
+    rotation={$store && $store.seatOf(name) ? ['Ton', 'Nan', 'Shaa', 'Pei'].indexOf($store.seatOf(name)) * 90 : 0}
     bottomLabel={$store && $store.Ton && $store.Ton.name}
     topLabel={$store && $store.Shaa && $store.Shaa.name}
     rightLabel={$store && $store.Nan && $store.Nan.name}

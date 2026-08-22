@@ -1,0 +1,440 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>discard geometry check v3 verbatim</title>
+<style>
+html, body { margin:0; padding:0; background:#111; }
+.world { position:relative; perspective:120vh; width:1000px; height:1000px; overflow:hidden; }
+.table {
+  position: relative;
+  width: min(100vw, 100vh);
+  height: min(100vw, 100vh);
+  margin: 0 auto;
+  background-color: #2f6b3a;
+  transform-style: preserve-3d;
+}
+
+/* verbatim from Tile.svelte's <style> block */
+.tile {
+  position: absolute;
+  left: max(-2vw, -2vh);
+  top: max(-2.65vw, -2.65vh);
+  width: min(4vw, 4vh);
+  height: min(5.3vw, 5.3vh);
+
+  transform-style: preserve-3d;
+  transform-origin: 50% 50% min(1.15vw, 1.15vh);
+  will-change: transform;
+  pointer-events: none;
+}
+.selection {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+}
+.front, .back, .left, .right, .top, .bottom {
+  position: absolute;
+  transform-style: preserve-3d;
+}
+.front, .back {
+  top: 0; left: 0;
+  width: min(4vw, 4vh);
+  height: min(5.3vw, 5.3vh);
+}
+.front {
+  box-sizing: border-box;
+  padding: 5%;
+  transform: translateZ(min(2.3vw, 2.3vh)) translateZ(-1px);
+}
+.ton .front { background:#ffb3b3; }
+.nan .front { background:#b3d1ff; }
+.shaa .front { background:#b3ffb8; }
+.pei .front { background:#ffe9b3; }
+.wall-tile .front { background: rgba(255,255,255,0.6); }
+.hand-tile .front { background: rgba(255,255,0,0.6); }
+.label { position:absolute; color:#fff; font:16px sans-serif; top:8px; left:8px; z-index:10; background:#000a; padding:6px; max-width:960px; }
+.marker { position:absolute; color:#000; font:8px monospace; z-index:5; }
+</style>
+</head>
+<body>
+<div class="world">
+  <div class="table" id="table">
+    <div class="label" id="label"></div>
+  </div>
+</div>
+<script>
+// ===== verbatim from client/src/app/Tile.svelte (module context script) =====
+const SUITS = ['Pin', 'Sou', 'Man', 'wind', 'dragon'];
+const VALUES = ['Ton', 'Nan', 'Shaa', 'Pei', 'Chun', 'Haku', 'Hatsu'];
+
+function shuffleArray(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+const playerSuitOrders = {};
+const playerWildSide = {};
+
+function getSuitOrder(wind) {
+  if (!playerSuitOrders[wind]) {
+    const numbered = shuffleArray(['Pin', 'Sou', 'Man']);
+    const wildSide = Math.random() < 0.5 ? 'left' : 'right';
+    playerWildSide[wind] = wildSide;
+    if (wildSide === 'left') {
+      playerSuitOrders[wind] = ['_wild', ...numbered, 'wind', 'dragon'];
+    } else {
+      playerSuitOrders[wind] = [...numbered, '_wild', 'wind', 'dragon'];
+    }
+  }
+  return playerSuitOrders[wind];
+}
+
+const valueOrder = (a, b) => typeof a === 'number'
+  ? a - b
+  : VALUES.indexOf(a) - VALUES.indexOf(b);
+const order = (tiles, wildcard, wind) => (a, b) => {
+  if (!tiles[a] || !tiles[b]) return 0;
+  const suits = getSuitOrder(wind);
+  const aWild = wildcard && tiles[a].suit === wildcard.suit && tiles[a].value === wildcard.value;
+  const bWild = wildcard && tiles[b].suit === wildcard.suit && tiles[b].value === wildcard.value;
+  const aSuit = aWild ? '_wild' : tiles[a].suit;
+  const bSuit = bWild ? '_wild' : tiles[b].suit;
+  const suitDiff = suits.indexOf(aSuit) - suits.indexOf(bSuit);
+  return suitDiff || valueOrder(tiles[a].value, tiles[b].value);
+};
+
+const pct = (amt, rev) => `${rev ? 'max' : 'min'}(${amt}vw, ${amt}vh)`;
+const TILE_DEPTH = 2.3;
+const TILE_WIDTH = 4;
+const TILE_HEIGHT = 5.3;
+const WALL_TILE_WIDTH = 3;
+
+const STACKS_PER_WALL = 17;
+const STACKS_WIDTH = STACKS_PER_WALL * WALL_TILE_WIDTH;
+
+const WALL_INSET = pct(100 - STACKS_WIDTH / 8.0 * 3);
+const WALL_POSITION = [
+  [
+    `translate(${pct(50 - STACKS_WIDTH / 2.0)}, ${WALL_INSET})`,
+    `translateX(-${(STACKS_PER_WALL - 1) * 0.75}px)`,
+  ],
+  [
+    `translateX(${pct(100)})`,
+    'rotateZ(90deg)',
+    `translate(${pct(50 - STACKS_WIDTH / 2.0)}, ${WALL_INSET})`,
+    `translateX(-${(STACKS_PER_WALL - 1) * 0.75}px)`,
+  ],
+  [
+    `translate(${pct(100)}, ${pct(100)})`,
+    'rotateZ(180deg)',
+    `translate(${pct(50 - STACKS_WIDTH / 2.0)}, ${WALL_INSET})`,
+    `translateX(-${(STACKS_PER_WALL - 1) * 0.75}px)`,
+  ],
+  [
+    `translateY(${pct(100)})`,
+    'rotateZ(270deg)',
+    `translate(${pct(50 - STACKS_WIDTH / 2.0)}, ${WALL_INSET})`,
+    `translateX(-${(STACKS_PER_WALL - 1) * 0.75}px)`,
+  ],
+];
+
+const HAND_SIZE = 13;
+const HAND_WIDTH = HAND_SIZE * TILE_WIDTH;
+const HAND_INSET = pct(100 - STACKS_WIDTH / 4 + TILE_HEIGHT);
+
+function handPosition(wind) {
+  switch (wind) {
+    case 'Ton':
+      return [
+        `translate(${pct(50 - HAND_WIDTH / 2.0)}, ${HAND_INSET})`,
+      ];
+    case 'Nan':
+      return [
+        `translateY(${pct(100)})`,
+        'rotateZ(270deg)',
+        `translate(${pct(50 - HAND_WIDTH / 2.0)}, ${HAND_INSET})`,
+      ];
+    case 'Shaa':
+      return [
+        `translate(${pct(100)}, ${pct(100)})`,
+        'rotateZ(180deg)',
+        `translate(${pct(50 - HAND_WIDTH / 2.0)}, ${HAND_INSET})`,
+      ];
+    case 'Pei':
+      return [
+        `translateX(${pct(100)})`,
+        'rotateZ(90deg)',
+        `translate(${pct(50 - HAND_WIDTH / 2.0)}, ${HAND_INSET})`,
+      ];
+  }
+}
+
+const DISCARD_SIZE = 8; // CANDIDATE FIX (was 10)
+const DISCARD_WIDTH = DISCARD_SIZE * TILE_WIDTH; // CANDIDATE FIX: self-centering width
+const DISCARD_INSET = pct(100 - STACKS_WIDTH / 8.0 * 3 - 2 * TILE_HEIGHT);
+function discardPosition(wind) {
+  switch (wind) {
+    case 'Ton':
+      return [
+        `translate(${pct(50 - DISCARD_WIDTH / 2.0)}, ${DISCARD_INSET})`,
+      ];
+    case 'Nan':
+      return [
+        `translateY(${pct(100)})`,
+        'rotateZ(270deg)',
+        `translate(${pct(50 - DISCARD_WIDTH / 2.0)}, ${DISCARD_INSET})`,
+      ];
+    case 'Shaa':
+      return [
+        `translate(${pct(100)}, ${pct(100)})`,
+        'rotateZ(180deg)',
+        `translate(${pct(50 - DISCARD_WIDTH / 2.0)}, ${DISCARD_INSET})`,
+      ];
+    case 'Pei':
+      return [
+        `translateX(${pct(100)})`,
+        'rotateZ(90deg)',
+        `translate(${pct(50 - DISCARD_WIDTH / 2.0)}, ${DISCARD_INSET})`,
+      ];
+  }
+}
+
+// harness stand-ins for Tile.svelte's component-scope reactive vars
+const WINDS = ['Ton', 'Nan', 'Shaa', 'Pei'];
+let index; // mutated per-tile before calling calcPosition, exactly like the real
+           // component's `export let index` prop being different per instance
+let tableAngle = 0;
+let myWind = null; // no "self" viewer in this harness -- draws every hand face-down
+
+// ===== verbatim from Tile.svelte's calcPosition(store), unmodified =====
+function calcPosition(store) {
+  if (index === store.indicator) {
+    const rollSum = store.roll[0] + store.roll[1] + store.roll[2];
+    let w = 3 - ((rollSum + 2) % 4);
+    let s = rollSum;
+    for (;;) {
+      if (s >= store.walls[w].length) {
+        s %= store.walls[w].length;
+        w = (w + 1) % 4;
+      }
+      if (s < 0) {
+        w = (w + 3) % 4;
+        s = store.walls[w].length - 1;
+      }
+      if (store.walls[w][s].length !== 0) {
+        break;
+      }
+      s -= 1;
+    }
+    const position = [...WALL_POSITION[w]];
+    const depth = (store.walls[w][s].length + 0.5) * TILE_DEPTH;
+    const horizontal = (STACKS_PER_WALL - s - 1) * WALL_TILE_WIDTH;
+    position.push(`translateZ(${pct(depth)})`);
+    position.push(`translateX(${(STACKS_PER_WALL - s) * 3}px)`);
+    position.push(`translateX(${pct(horizontal)})`);
+    return `transform: ${position.join(' ')}`;
+  }
+
+  for (const [wall, i] of store.walls.map((wall, i) => [wall, i])) {
+    for (const [stack, j] of wall.map((stack, j) => [stack, j])) {
+      const k = stack.indexOf(index);
+      if (k === -1) continue;
+      const position = [...WALL_POSITION[i]];
+      const depth = k * TILE_DEPTH;
+      const horizontal = (STACKS_PER_WALL - j - 1) * WALL_TILE_WIDTH;
+      position.push(`translateZ(${pct(depth)})`);
+      position.push(`translateX(${(STACKS_PER_WALL - j) * 3}px)`)
+      position.push(`translateX(${pct(horizontal)})`);
+      position.push('rotateY(180deg)');
+      return `transform: ${position.join(' ')}`;
+    }
+  }
+
+  for (const wind of WINDS.filter(wind => store[wind])) {
+    if (store[wind].up.includes(index)) {
+      const position = handPosition(wind);
+      let i = HAND_SIZE + 1;
+      if (index !== store.drawn) {
+        i = [...store[wind].up.filter(x => x !== store.drawn)].sort(order(store.tiles, store.wildcard, wind)).indexOf(index);
+      }
+      const horizontal = i * TILE_WIDTH;
+      position.push(`translateX(${i * 3}px)`);
+      position.push(`translateX(${pct(horizontal)})`);
+      const isExposedWild = (store[wind].exposedWildcards || []).includes(index);
+      if (!store.completed && (tableAngle || wind !== myWind) && !isExposedWild) {
+        position.push(`translateZ(${pct((TILE_HEIGHT - TILE_DEPTH) / 2)})`);
+        position.push(`rotateX(-90deg)`);
+      }
+      return `transform: ${position.join(' ')}`;
+    } else if ([].concat(...store[wind].down).includes(index)) {
+      const position = handPosition(wind);
+      let i = store[wind].down.findIndex(meld => meld.includes(index));
+      let j = [...store[wind].down[i]].sort(order(store.tiles, store.wildcard, wind)).indexOf(index);
+      let k = 0;
+      if (j === 3) {
+        j = 1;
+        k = 1;
+      }
+      let flip = false;
+      if (store[wind].down[i][4] === 'concealed' && j !== 1) {
+        flip = true;
+      }
+      j += i * 3 + store[wind].up.filter(x => x !== store.drawn).length + 0.5;
+      let horizontal = j * TILE_WIDTH;
+      let depth = k * TILE_DEPTH;
+      position.push(`translateX(${j * 3}px)`);
+      position.push(`translateX(${pct(horizontal)})`);
+      position.push(`translateZ(${pct(depth)})`);
+      if (flip) {
+        position.push('rotateY(180deg)');
+      }
+      return `transform: ${position.join(' ')}`;
+    } else if (store[wind].discarded.includes(index)) {
+      const position = discardPosition(wind);
+      const i = store[wind].discarded.indexOf(index);
+      const j = i % DISCARD_SIZE;
+      const k = Math.floor(i / DISCARD_SIZE);
+      const horizontal = j * TILE_WIDTH;
+      const vertical = k * TILE_HEIGHT;
+      position.push(`translate(${j * 3}px, ${k * 3}px)`);
+      position.push(`translate(${pct(horizontal)}, ${pct(vertical, true)})`);
+      return `transform: ${position.join(' ')}`;
+    }
+  }
+
+  return '';
+}
+
+// ===== harness: build a fake schema and render every tile =====
+const table = document.getElementById('table');
+
+function makePlayer(name) { return { name, up: [], down: [], discarded: [], ready: false, exposedWildcards: [] }; }
+
+const store = {
+  indicator: -1,
+  roll: [1, 1, 1],
+  wildcard: undefined,
+  drawn: undefined,
+  completed: false,
+  tiles: {},
+  walls: [[], [], [], []],
+  Ton: makePlayer('Ton'), Nan: makePlayer('Nan'), Shaa: makePlayer('Shaa'), Pei: makePlayer('Pei'),
+};
+
+let nextIndex = 0;
+function alloc(n) {
+  const arr = [];
+  for (let i = 0; i < n; i++) { store.tiles[nextIndex] = { suit: 'Pin', value: (nextIndex % 9) + 1 }; arr.push(nextIndex); nextIndex++; }
+  return arr;
+}
+
+const WALL_ORDER = ['Ton', 'Nan', 'Shaa', 'Pei'];
+for (let w = 0; w < 4; w++) {
+  for (let s = 0; s < STACKS_PER_WALL; s++) {
+    store.walls[w].push(alloc(2));
+  }
+}
+
+const DISCARD_COUNT = 15;
+for (const wind of WINDS) {
+  const tiles = alloc(HAND_SIZE);
+  store[wind].up.push(...tiles);
+  const discards = alloc(DISCARD_COUNT);
+  store[wind].discarded.push(...discards);
+}
+
+function renderTile(idx, cls) {
+  const sel = document.createElement('div');
+  sel.className = 'selection';
+  const tile = document.createElement('div');
+  tile.className = 'tile ' + cls;
+  index = idx; // set the harness's mutable `index` before calling calcPosition
+  const styleStr = calcPosition(store); // verbatim function call
+  tile.setAttribute('style', styleStr.replace('transform:', 'transform:') );
+  const front = document.createElement('div');
+  front.className = 'front';
+  tile.appendChild(front);
+  const marker = document.createElement('div');
+  marker.className = 'marker';
+  marker.textContent = idx;
+  tile.appendChild(marker);
+  sel.appendChild(tile);
+  table.appendChild(sel);
+  return tile;
+}
+
+const results = { walls: {}, hands: {}, discards: {} };
+for (let w = 0; w < 4; w++) {
+  const wind = WALL_ORDER[w];
+  for (const stack of store.walls[w]) {
+    for (const idx of stack) renderTile(idx, 'wall-tile');
+  }
+}
+for (const wind of WINDS) {
+  for (const idx of store[wind].up) renderTile(idx, 'hand-tile ' + wind.toLowerCase());
+  for (const idx of store[wind].discarded) renderTile(idx, wind.toLowerCase());
+}
+
+document.getElementById('label').textContent =
+  `verbatim Tile.svelte calcPosition() -- Ton discards=red Nan=blue Shaa=green Pei=orange; wall=white; hand=yellow. ${DISCARD_COUNT} discards/player (2 rows).`;
+
+// Report bounding boxes for programmatic overlap checking.
+window.__report = function () {
+  const tableRect = table.getBoundingClientRect();
+  function rel(r) { return { left: r.left - tableRect.left, top: r.top - tableRect.top, right: r.right - tableRect.left, bottom: r.bottom - tableRect.top }; }
+  const out = { tableSize: { w: tableRect.width, h: tableRect.height } };
+  for (const wind of WINDS) {
+    const discardEls = store[wind].discarded.map(idx => document.querySelector(`.marker`)); // placeholder, replaced below
+  }
+  // Build index->element map via markers
+  const byIndex = {};
+  document.querySelectorAll('.tile').forEach(t => {
+    const m = t.querySelector('.marker');
+    byIndex[m.textContent] = t;
+  });
+  for (const wind of WINDS) {
+    const rows = { row0: [], row1: [] };
+    store[wind].discarded.forEach((idx, i) => {
+      const el = byIndex[idx];
+      const r = rel(el.getBoundingClientRect());
+      (i < 10 ? rows.row0 : rows.row1).push(r);
+    });
+    function union(list) {
+      if (!list.length) return null;
+      return list.reduce((a, b) => ({
+        left: Math.min(a.left, b.left), top: Math.min(a.top, b.top),
+        right: Math.max(a.right, b.right), bottom: Math.max(a.bottom, b.bottom),
+      }));
+    }
+    out[wind + '_row0'] = union(rows.row0);
+    out[wind + '_row1'] = union(rows.row1);
+  }
+  // wall union per wind, hand union per wind
+  for (let w = 0; w < 4; w++) {
+    const wind = WALL_ORDER[w];
+    const els = store.walls[w].flat().map(idx => byIndex[idx]);
+    const rects = els.map(e => rel(e.getBoundingClientRect()));
+    out[wind + '_wall'] = rects.reduce((a, b) => ({
+      left: Math.min(a.left, b.left), top: Math.min(a.top, b.top),
+      right: Math.max(a.right, b.right), bottom: Math.max(a.bottom, b.bottom),
+    }));
+  }
+  for (const wind of WINDS) {
+    const els = store[wind].up.map(idx => byIndex[idx]);
+    const rects = els.map(e => rel(e.getBoundingClientRect()));
+    out[wind + '_hand'] = rects.reduce((a, b) => ({
+      left: Math.min(a.left, b.left), top: Math.min(a.top, b.top),
+      right: Math.max(a.right, b.right), bottom: Math.max(a.bottom, b.bottom),
+    }));
+  }
+  return out;
+};
+</script>
+</body>
+</html>

@@ -19,9 +19,11 @@
         selectionSet.tiles.length === $selection.size;
     });
 
-  $: myWind = $store && $store.playerWind(socket.name);
+  // This component is only mounted for a seated player, but guard `myWind`
+  // being falsy anyway (e.g. a spectator) rather than throwing on $store[myWind].
+  $: myWind = $store && $store.seatOf(socket.name);
   $: isWild = (t) => $store.wildcard && eq(t, $store.wildcard);
-  $: concealedKongs = $store[myWind].up
+  $: concealedKongs = myWind ? $store[myWind].up
     .filter((tile, i, tiles) =>
       !isWild($store.tiles[tile]) &&
       tiles
@@ -29,8 +31,8 @@
         .map(tile => $store.tiles[tile])
         .filter(info => eq(info, $store.tiles[tile]))
         .length === 3
-    );
-  $: exposedKongs = $store[myWind].up
+    ) : [];
+  $: exposedKongs = myWind ? $store[myWind].up
     .filter(tile =>
       !isWild($store.tiles[tile]) &&
       $store[myWind].down
@@ -39,7 +41,7 @@
           .map(tile => $store.tiles[tile])
           .every(info => eq(info, $store.tiles[tile]))
         )
-    );
+    ) : [];
 
   function wait() {
     $timer.paused = Date.now();
@@ -94,11 +96,11 @@
     {#if $timer && !$currentVotes[myWind]}
       {#if !$timer.paused}
         <button class="action" on:click={wait}>
-          Wait
+          想想
         </button>
       {/if}
       <button class="action" on:click={cancel}>
-        {$store.turn === myWind ? 'Draw' : 'Ignore'}
+        {$store.turn === myWind ? '摸' : '过'}
       </button>
     {/if}
     
@@ -108,7 +110,7 @@
       </button>
     {/each}
 
-    {#if $store && Schema.winningHand($store, $store[myWind]) && $store.turn === myWind}
+    {#if $store && myWind && Schema.winningHand($store, $store[myWind]) && $store.turn === myWind}
       <button class="action" on:click={win}>
         胡
       </button>
