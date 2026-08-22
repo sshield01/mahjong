@@ -53,11 +53,11 @@
     if (discarded) {
       const player = { ...storeValue[myWind] };
       player.up = [...player.up, storeValue.discarded];
-      // The eye-constrained form only finds wins where the discard completes the
-      // pair; the unconstrained form also catches it completing a run (chow).
-      // Both are needed, or 胡 never offers on a chow-shaped winning hand.
-      canWin = Schema.winningHand(storeValue, player, storeValue.discarded)
-        || Schema.winningHand(storeValue, player);
+      // Must stay eye-constrained: this gates the 胡 that sends `win {Eyes}`, and
+      // the server's `eyes()` requires the discard to complete the *pair*. A hand
+      // that wins on a run is offered separately below, via `win {Chow, tiles}` --
+      // adding the unconstrained form here just produces a 胡 the server rejects.
+      canWin = Schema.winningHand(storeValue, player, storeValue.discarded);
     } else {
       canWin = false;
     }
