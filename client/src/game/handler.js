@@ -77,11 +77,7 @@ export default async function handler(
         schema.nextTurn();
         store.set(schema);
         const myWind = schema.seatOf(socket.name);
-        // If I have a real decision to make (chow/pong/kong/win), there is no
-        // forced timer -- same as chow already worked: it's on me to act via the
-        // actual game UI whenever I'm ready, and nobody else's vote is blocked by
-        // my deliberation (resolution waits for every seat's vote regardless).
-        if (myWind && position !== myWind && !hasActions(schema, myWind)) {
+        if (myWind && position !== myWind) {
           // Fallback vote if I never act: draw on my own turn, otherwise ignore.
           // This must stay a real vote (never a bare "ignore" for the turn player) since
           // `Draw` is the one vote the server always knows how to resolve.
@@ -90,14 +86,17 @@ export default async function handler(
             const action = schema.turn === myWind ? "draw" : "ignore";
             socket.send(action).catch(() => {});
           };
-          if (!hasClaims) {
+          if (!hasActions(schema, myWind) && !hasClaims) {
             // Nobody (including me) has any claim on this discard -- nothing to wait
             // for, so keep the game moving instead of arming a pointless timer.
             fallback();
           } else {
-            // I have no action of my own, but someone else might -- give this a
-            // pausable grace period before falling back, so their claim isn't cut
-            // off by my (or the next-turn player's) auto-vote firing too soon.
+            // Either I have a real decision, or someone else might. Arm the
+            // countdown either way, so 想想 (pause) and 过 (decline) always appear
+            // together -- a claim holder needs the pause button most of all, and
+            // gating it on "no claim" put the two buttons on different players'
+            // screens. Pausing stops the auto-vote entirely, so there is no time
+            // pressure on whoever actually has to decide.
             timer.set({
               start: Date.now(),
               paused: false,
