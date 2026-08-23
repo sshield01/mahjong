@@ -232,10 +232,14 @@ export default async function handler(
         selectionSets.set([]);
         selection.set(new Set());
         timer.set(null);
-        const { position, eyes, reveal, kong, scores } = message.body;
+        const { position, eyes, reveal, kong, scores, washedOut, finalDraw } = message.body;
         schema.turn = position;
         schema.tiles = reveal;
         schema.completed = true;
+        // 黄庄 has no winning hand to lay out, and 海底捞 adds a bonus line --
+        // the scoreboard needs to know which ending this was.
+        schema.washedOut = !!washedOut;
+        schema.finalDraw = !!finalDraw;
         if (scores) schema.scores = scores;
         if (eyes !== undefined) {
           for (const tile of eyes) {

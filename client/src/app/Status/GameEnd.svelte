@@ -11,6 +11,14 @@
 
   $: isDealer = $store.turn === 'Ton';
   $: isSelfDraw = $store.source === 'front' || $store.source === 'back';
+  // Taken on a tile from the wall's last lap.
+  $: isFinalDraw = !!$store.finalDraw;
+  // 黄庄: the wall ran down with nobody out, so there is no hand to lay out --
+  // the dealer just collects a flat two from each of the others.
+  $: washedOut = !!$store.washedOut;
+  $: washOutLosers = ['Ton', 'Nan', 'Shaa', 'Pei']
+    .filter(wind => $store[wind] && wind !== $store.turn)
+    .map(wind => $store[wind].name);
 
   $: isPongpong = (() => {
     const isW = t => $store.wildcard && eq(t, $store.wildcard);
@@ -150,7 +158,8 @@
     return Object.values(counts).filter(c => c === 4).length;
   })();
 
-  $: scoreBreakdown = (() => {
+  // 黄庄 has no winning hand to score, so none of this applies.
+  $: scoreBreakdown = washedOut ? { lines: [], losers: [], winnerTotal: 0 } : (() => {
     const WINDS = ['Ton', 'Shaa', 'Pei', 'Nan'];
 
     function calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount) {
@@ -165,6 +174,7 @@
       if (isAllJiang) score += 10;
       if (isAllWinds) score += 10;
       if (isAllSameKind) score += 10;
+      if (isFinalDraw) score += 10;
       if (hasNoWildcard) score *= 2;
       for (let i = 0; i < kongCount + loserKongCount; i++) score *= 2;
       for (let i = 0; i < pairsFourOfAKind; i++) score *= 2;
@@ -180,6 +190,7 @@
     if (isAllJiang) lines.push({ label: '全将', value: '+10' });
     if (isAllWinds) lines.push({ label: '全风', value: '+10' });
     if (isAllSameKind) lines.push({ label: '清一色', value: '+10' });
+    if (isFinalDraw) lines.push({ label: '海底捞', value: '+10' });
     for (let i = 0; i < kongCount; i++) lines.push({ label: '杠', value: 'x2' });
     for (let i = 0; i < pairsFourOfAKind; i++) lines.push({ label: '豪华', value: 'x2' });
 
@@ -214,24 +225,40 @@
 </script>
 
 <div class="container">
-  <h1 class="title">{$store[$store.turn].name} 胡了</h1>
+  <h1 class="title">{washedOut ? '黄庄' : `${$store[$store.turn].name} 胡了`}</h1>
 
   <div class="scores">
-    {#each scoreBreakdown.lines as { label, value }}
-      <div class="rule">{label}: {value}</div>
-    {/each}
-    <div class="round-results">
-      <div class="result-row">
-        <span>{winner.name}</span>
-        <span class="positive">+{scoreBreakdown.winnerTotal}</span>
-      </div>
-      {#each scoreBreakdown.losers as loser}
+    {#if washedOut}
+      <div class="rule">牌墙摸完，无人和牌</div>
+      <div class="round-results">
         <div class="result-row">
-          <span>{loser.name}{loser.reasons.length ? ' (' + loser.reasons.join(', ') + ')' : ''}</span>
-          <span class="negative">-{loser.payment}{loser.rawScore > 30 ? ` (${loser.rawScore})` : ''}</span>
+          <span>{winner.name} (庄家)</span>
+          <span class="positive">+{washOutLosers.length * 2}</span>
         </div>
+        {#each washOutLosers as name}
+          <div class="result-row">
+            <span>{name}</span>
+            <span class="negative">-2</span>
+          </div>
+        {/each}
+      </div>
+    {:else}
+      {#each scoreBreakdown.lines as { label, value }}
+        <div class="rule">{label}: {value}</div>
       {/each}
-    </div>
+      <div class="round-results">
+        <div class="result-row">
+          <span>{winner.name}</span>
+          <span class="positive">+{scoreBreakdown.winnerTotal}</span>
+        </div>
+        {#each scoreBreakdown.losers as loser}
+          <div class="result-row">
+            <span>{loser.name}{loser.reasons.length ? ' (' + loser.reasons.join(', ') + ')' : ''}</span>
+            <span class="negative">-{loser.payment}{loser.rawScore > 30 ? ` (${loser.rawScore})` : ''}</span>
+          </div>
+        {/each}
+      </div>
+    {/if}
   </div>
 
   {#if $store.scores && Object.keys($store.scores).length > 0}

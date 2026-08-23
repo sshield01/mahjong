@@ -2,6 +2,7 @@ import { WINDS } from "../lib/schema.js";
 import Message from "../socket/message.js";
 import sockets from "./sockets.js";
 import { autoPlayAfterDraw, isDisconnected } from "./autoplay.js";
+import playFinalRound from "./finalRound.js";
 
 const votes = new WeakMap();
 
@@ -34,6 +35,9 @@ export function handle(socket, schema, votes) {
 
   switch (action.method) {
     case "Draw": {
+      // Nobody claimed the discard and the wall is down to its last lap: the
+      // 海底 round takes over from here and finishes the hand.
+      if (playFinalRound(socket, schema)) break;
       // The wall can be spent by the time a round resolves -- there is simply no
       // tile left to hand over. Throwing here escapes vote resolution with the
       // round already deleted, and on the disconnect path, which has no message

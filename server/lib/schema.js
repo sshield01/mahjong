@@ -16,6 +16,23 @@ function dealerSeat(schema) {
   return TURN_ORDER.find((position) => schema[position]);
 }
 
+// The tail of the wall nobody draws from in normal play -- it is what a kong
+// replaces from. Before it, every seated player gets one last draw: the 海底
+// round. At a full table that is the four tiles sitting at positions 11 to 14
+// counting back from the end, exactly as the rule describes; at a shorter table
+// it is one apiece, so the round is always a single lap.
+export const DEAD_WALL = 10;
+
+// How many ordinary draws before the last lap the table starts showing which
+// tiles it will be made of, so the end of the hand is visible coming. At a full
+// table the first tile of the 海底 round is the 14th counting back from the end
+// of the wall, so twelve draws of warning puts the mark on at the 26th.
+export const LAST_LAP_NOTICE = 12;
+
+// 黄庄: the wall ran down with nobody out. The dealer takes a default win worth
+// this much from every other seat.
+const WASH_OUT_POINTS = 2;
+
 const HONOR_CYCLE = ["Ton", "Nan", "Shaa", "Pei", "Chun", "Hatsu", "Haku"];
 const NEXT_HONOR = Object.fromEntries(HONOR_CYCLE.map((h, i) => [h, HONOR_CYCLE[(i + 1) % HONOR_CYCLE.length]]));
 const HONOR_SUIT = { Ton: "wind", Nan: "wind", Shaa: "wind", Pei: "wind", Chun: "dragon", Hatsu: "dragon", Haku: "dragon" };
@@ -407,6 +424,10 @@ export default class Schema {
     this.drawn = basis.drawn;
     this.source = basis.source;
     this.discarded = basis.discarded;
+    // Won on a tile from the 海底 round, and ended with nobody out. Both ride
+    // along so a reloading client and the scoreboard can tell what happened.
+    this.finalDraw = basis.finalDraw || false;
+    this.washedOut = basis.washedOut || false;
 
     this.tiles = basis.tiles || shuffle([...tiles()]);
     this.walls = basis.walls || [...walls(this.tiles.length)];
@@ -558,9 +579,89 @@ export default class Schema {
     }
   }
 
+  // How many tiles are still sitting in the wall.
+  tilesRemaining() {
+    return this.walls.reduce(
+      (total, wall) => total + wall.reduce((n, stack) => n + stack.length, 0),
+      0,
+    );
+  }
+
+  // Is the wall down to its last lap? Everything left beyond the dead wall is
+  // one final draw per seated player, taken without discarding.
+  finalRound() {
+    return this.tilesRemaining() <= DEAD_WALL + this.seatedPlayers().length;
+  }
+
+  // Everything still in the wall, in the order it will come off it: forward from
+  // the break, and top tile first within each stack. Kongs eat the far end, so
+  // the tail of this is the dead wall.
+  drawOrder() {
+    const order = [];
+    if (this.roll === undefined) return order;
+    let wall = 3 - ((sum(this.roll) + 2) % 4);
+    let stack = sum(this.roll) + 1;
+    const stacks = this.walls.reduce((n, w) => n + w.length, 0);
+    for (let n = 0; n < stacks; n++) {
+      if (stack >= this.walls[wall].length) {
+        stack %= this.walls[wall].length;
+        wall = (wall + 1) % 4;
+      }
+      const tiles = this.walls[wall][stack];
+      for (let i = tiles.length - 1; i >= 0; i--) order.push(tiles[i]);
+      stack += 1;
+    }
+    return order;
+  }
+
+  // Which tiles the 海底 round will be drawn from, and how many ordinary draws
+  // are still to come before it starts.
+  lastLap() {
+    const order = this.drawOrder();
+    const end = Math.max(0, order.length - DEAD_WALL);
+    const start = Math.max(0, end - this.seatedPlayers().length);
+    return { tiles: order.slice(start, end), drawsAway: start };
+  }
+
+  // 黄庄. Nobody got out, so the dealer takes a default win and every other seat
+  // pays them a flat WASH_OUT_POINTS -- no hand bonuses, no doublings, no cap.
+  // Leaving `turn` on the dealer is also what keeps the deal with them, since
+  // `nextGame` rotates the seats unless the dealer took the round.
+  washOut() {
+    const position = dealerSeat(this);
+    this.completed = true;
+    this.washedOut = true;
+    this.turn = position;
+    delete this.discarded;
+
+    const winner = this[position].name;
+    if (!this.scores[winner]) this.scores[winner] = 0;
+    let total = 0;
+    for (const wind of WINDS) {
+      if (!this[wind] || wind === position) continue;
+      const loser = this[wind].name;
+      if (!this.scores[loser]) this.scores[loser] = 0;
+      this.scores[loser] -= WASH_OUT_POINTS;
+      total += WASH_OUT_POINTS;
+    }
+    this.scores[winner] += total;
+
+    return new Message("win", {
+      position,
+      reveal: this.tiles,
+      washedOut: true,
+      kong: false,
+      allClear: false,
+      allFromOthers: false,
+      scores: this.scores,
+    });
+  }
+
   draw(position) {
     if (position !== this.turn || this.drawn !== undefined) {
-      throw new Error(`It is not ${name}'s turn to draw.`);
+      // `name` is not a variable here -- this used to throw ReferenceError and
+      // bury whatever actually went wrong.
+      throw new Error(`It is not ${position}'s turn to draw.`);
     }
     const [wall, stack] = this.nextDraw();
     const tile = this.walls[wall][stack].pop();
@@ -827,6 +928,7 @@ export default class Schema {
 
     const isDealer = position === "Ton";
     const isSelfDraw = this.source === "front" || this.source === "back";
+    const isFinalDraw = !!this.finalDraw;
 
     const isPongpong = (() => {
       const isW = (t) => this.wildcard && eq(t, this.wildcard);
@@ -1032,6 +1134,8 @@ export default class Schema {
       if (isAllJiang) score += 10;
       if (isAllWinds) score += 10;
       if (isAllSameKind) score += 10;
+      // 海底捞 -- taken on a tile from the wall's last lap.
+      if (isFinalDraw) score += 10;
       if (hasNoWildcard) score *= 2;
       for (let i = 0; i < kongCount + loserKongCount; i++) score *= 2;
       for (let i = 0; i < pairsFourOfAKind; i++) score *= 2;
@@ -1077,7 +1181,11 @@ export default class Schema {
     const allClear = this[position].down.length === 0;
     const allFromOthers = false;
     this.updateScores(position);
-    return new Message("win", { position, reveal: this.tiles, kong, allClear, allFromOthers, scores: this.scores });
+    return new Message("win", {
+      position, reveal: this.tiles, kong, allClear, allFromOthers,
+      finalDraw: this.finalDraw,
+      scores: this.scores,
+    });
   }
 
   // Could `position` win by claiming the currently pending discard (any shape:

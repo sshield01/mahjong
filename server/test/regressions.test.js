@@ -2,8 +2,9 @@
 // commit it locks down, so the intended rule is traceable to when it was decided.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import Schema, { eq } from "../lib/schema.js";
+import Schema, { eq, LAST_LAP_NOTICE } from "../lib/schema.js";
 import Vote, { handle } from "../game/votes.js";
+import playFinalRound from "../game/finalRound.js";
 
 const W = (value) => ({ suit: "wind", value });
 const D = (value) => ({ suit: "dragon", value });
@@ -166,6 +167,193 @@ describe("the eye constraint", () => {
       false,
       "...but not by using it as the pair, so an eyes-claim must be refused",
     );
+  });
+});
+
+describe("the 海底 round", () => {
+  // Everything past the ten-tile dead wall is one last draw per seat, taken
+  // without discarding: win on the tile you drew and it is 海底捞 (+10), and if
+  // the lap goes round with nobody out the hand is 黄庄.
+  function tableWithWall(remaining, seats = ["Ton", "Nan", "Shaa", "Pei"]) {
+    const { schema, seat } = table();
+    seats.forEach((position, i) => seat(position, `P${i}`, { up: [] }));
+    // One tile per stack, so the count is exactly what we asked for.
+    schema.walls = [[], [], [], []];
+    for (let i = 0; i < remaining; i++) schema.walls[i % 4].push([i]);
+    schema.roll = [1, 1, 1]; // drawOrder needs a break to walk from
+    return schema;
+  }
+
+  test("the last lap starts once the wall is down to a draw per seat", () => {
+    const four = tableWithWall(15);
+    assert.equal(four.tilesRemaining(), 15);
+    assert.equal(four.finalRound(), false, "15 left at a full table is still ordinary play");
+
+    const atFourteen = tableWithWall(14);
+    assert.equal(atFourteen.finalRound(), true, "14 left is the last four tiles");
+
+    // A shorter table takes a shorter lap, so the dead wall is still ten.
+    const three = tableWithWall(13, ["Ton", "Nan", "Shaa"]);
+    assert.equal(three.finalRound(), true, "three seats, three final draws");
+    assert.equal(tableWithWall(14, ["Ton", "Nan"]).finalRound(), false);
+    assert.equal(tableWithWall(12, ["Ton", "Nan"]).finalRound(), true);
+  });
+
+  test("黄庄 pays the dealer two from every other seat and keeps the deal", () => {
+    const { schema, seat } = table();
+    seat("Ton", "A", { up: [] });
+    seat("Nan", "B", { up: [] });
+    seat("Shaa", "C", { up: [] });
+    schema.started = true;
+
+    const message = schema.washOut();
+
+    assert.equal(message.subject, "win");
+    assert.equal(message.body.washedOut, true);
+    assert.equal(message.body.position, "Ton", "the dealer takes the default win");
+    assert.equal(schema.completed, true);
+    assert.deepEqual(schema.scores, { A: 4, B: -2, C: -2 });
+
+    // `nextGame` rotates the seats unless the dealer took the round, so leaving
+    // `turn` on them is what keeps the deal.
+    const next = Schema.nextGame(schema, schema);
+    assert.equal(next.Ton.name, "A", "the dealer keeps the deal through a 黄庄");
+  });
+
+  // With Ton empty -- seats are chosen freely -- the default win still has to
+  // land on whoever was dealt in, not on a seat nobody is sitting at.
+  test("黄庄 falls back to the dealer's seat when 东 is empty", () => {
+    const { schema, seat } = table();
+    seat("Nan", "B", { up: [] });
+    seat("Shaa", "C", { up: [] });
+    schema.started = true;
+
+    const message = schema.washOut();
+    assert.equal(message.body.position, "Nan");
+    assert.deepEqual(schema.scores, { B: 2, C: -2 });
+  });
+
+  // What the table marks up as the wall runs down: which tiles the 海底 round
+  // will come from, and how many ordinary draws are left before it.
+  test("lastLap names the tiles just short of the dead wall, and counts down", () => {
+    const schema = tableWithWall(20);
+    const order = schema.drawOrder();
+
+    assert.equal(order.length, 20, "every tile still in the wall, in draw order");
+    assert.equal(new Set(order).size, 20, "and each of them once");
+
+    const { tiles, drawsAway } = schema.lastLap();
+    assert.equal(drawsAway, 6, "20 left, four seats, ten reserved -- six ordinary draws to go");
+    assert.deepEqual(tiles, order.slice(6, 10), "the four sitting just before the dead wall");
+
+    // The ten behind them are the reserve and are never part of the lap.
+    assert.equal(order.slice(10).length, 10);
+    assert.ok(tiles.every((t) => !order.slice(10).includes(t)));
+
+    // The mark goes on twelve draws out, which at a full table is the 26th tile
+    // counting back from the end of the wall -- ten reserved, four for the lap,
+    // twelve of warning ahead of them.
+    assert.equal(tableWithWall(26).lastLap().drawsAway, LAST_LAP_NOTICE);
+    assert.ok(tableWithWall(27).lastLap().drawsAway > LAST_LAP_NOTICE, "not a draw sooner");
+
+    // Down to the lap itself, nothing is "away" any more.
+    assert.equal(tableWithWall(14).lastLap().drawsAway, 0);
+    assert.equal(tableWithWall(14).lastLap().tiles.length, 4);
+    // And a shorter table takes a shorter lap.
+    assert.equal(tableWithWall(20, ["Ton", "Nan"]).lastLap().tiles.length, 2);
+    assert.equal(tableWithWall(20, ["Ton", "Nan"]).lastLap().drawsAway, 8);
+  });
+
+  // Drives the real module, not just the rules underneath it.
+  function lastLap(hands, wallTiles) {
+    const tiles = [];
+    const put = (list) => list.map((t) => (tiles.push(t), tiles.length - 1));
+    const schema = new Schema({ name: "r", tiles, walls: [[], [], [], []] });
+    for (const [position, name, up] of hands) {
+      schema[position] = {
+        name, up: put(up), down: [], discarded: [], ready: false, exposedWildcards: [],
+      };
+    }
+    // One tile per stack, all in one wall, so `nextDraw` walks them in order.
+    for (const tile of put(wallTiles)) schema.walls[2].push([tile]);
+    schema.started = true;
+    schema.turn = hands[0][0];
+    schema.previousTurn = hands[hands.length - 1][0];
+    schema.roll = [1, 1, 1];
+    return schema;
+  }
+
+  const JUNK = [
+    T("Man", 1), T("Man", 4), T("Man", 7),
+    T("Pin", 1), T("Pin", 4), T("Pin", 7),
+    T("Sou", 1), T("Sou", 4), T("Sou", 7),
+    W("Ton"), W("Nan"), D("Chun"), D("Haku"),
+  ];
+
+  test("winning on a last-lap tile ends the hand as 海底捞", () => {
+    // All winds wins outright, and the wall is all winds too, so the very first
+    // tile of the last lap completes it.
+    const winds = ["Ton", "Nan", "Shaa", "Pei"];
+    const hand = Array.from({ length: 13 }, (_, i) => W(winds[i % 4]));
+    const wall = Array.from({ length: 12 }, (_, i) => W(winds[i % 4]));
+    const schema = lastLap([["Ton", "A", hand], ["Nan", "B", [...JUNK]]], wall);
+    assert.equal(schema.finalRound(), true, "12 left at a two-seat table is the last lap");
+
+    const sent = [];
+    const ended = playFinalRound({ emit: (m) => sent.push(m) }, schema);
+
+    assert.equal(ended, true, "the last lap takes over and finishes the hand");
+    assert.equal(schema.completed, true);
+    assert.equal(schema.finalDraw, true, "flagged as 海底捞");
+    assert.equal(schema.turn, "Ton", "the winner");
+    assert.deepEqual(sent.map((m) => m.subject), ["draw", "win"]);
+    assert.ok(schema.scores.A > 0 && schema.scores.B < 0);
+  });
+
+  test("a last lap with nobody out ends as 黄庄, leaving the dead wall alone", () => {
+    const schema = lastLap(
+      [["Ton", "A", [...JUNK]], ["Nan", "B", [...JUNK]]],
+      Array.from({ length: 12 }, (_, i) => T("Man", (i % 9) + 1)),
+    );
+
+    const sent = [];
+    const ended = playFinalRound({ emit: (m) => sent.push(m) }, schema);
+
+    assert.equal(ended, true);
+    assert.equal(schema.washedOut, true);
+    assert.equal(schema.completed, true);
+    assert.equal(
+      sent.map((m) => m.subject).join(","),
+      "draw,draw,win",
+      "one draw per seat, then the result",
+    );
+    assert.equal(schema.tilesRemaining(), 10, "the ten-tile dead wall is never touched");
+    assert.deepEqual(schema.scores, { A: 2, B: -2 });
+  });
+
+  test("海底捞 is worth ten on top of the hand", () => {
+    const { schema, seat } = table();
+    seat("Ton", "A", {
+      up: [
+        W("Ton"), W("Ton"), W("Ton"), W("Ton"),
+        W("Nan"), W("Nan"), W("Nan"), W("Nan"),
+        W("Shaa"), W("Shaa"), W("Shaa"), W("Shaa"),
+        W("Pei"), W("Pei"),
+      ],
+    });
+    seat("Nan", "B", { up: [] });
+    schema.turn = "Ton";
+    schema.previousTurn = "Nan";
+    schema.source = "front";
+
+    const ordinary = schema.computeRoundScore("Ton").calcLoserScore(false, true, 0);
+    schema.finalDraw = true;
+    const onTheLastLap = schema.computeRoundScore("Ton").calcLoserScore(false, true, 0);
+
+    // The bonus lands with the other flat bonuses, so the doublings that apply
+    // to the hand apply to it too: 无癞子, and one for each four-of-a-kind.
+    const multiplier = 2 * 2 ** 3; // 无癞子; Ton, Nan and Shaa each appear four times
+    assert.equal(onTheLastLap - ordinary, 10 * multiplier);
   });
 });
 

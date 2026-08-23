@@ -1,7 +1,7 @@
 <script>
   import { get } from 'svelte/store';
   import Tile from './Tile.svelte';
-  import Schema, { eq } from '../lib/schema.js';
+  import Schema, { eq, LAST_LAP_NOTICE } from '../lib/schema.js';
   import context from '../game/context.js';
 
   export let tableAngle;
@@ -318,6 +318,20 @@
 
   $: $hasAction = !myTurn && $selectionSets.length;
 
+  // The tiles the 海底 round will be drawn from, marked once the wall is close
+  // enough that knowing is useful. Worked out once here rather than per tile --
+  // it walks the whole wall, and there are 136 of them.
+  let lastLap = new Set();
+  $: {
+    const storeValue = $store;
+    if (storeValue && storeValue.started && !storeValue.completed && storeValue.roll !== undefined) {
+      const { tiles, drawsAway } = storeValue.lastLap();
+      lastLap = drawsAway <= LAST_LAP_NOTICE ? new Set(tiles) : new Set();
+    } else {
+      lastLap = new Set();
+    }
+  }
+
   // Mirror the discard tile's own click handler onto the DiscardInfo indicator, so
   // a claim can be made from the big tile at the top of the screen instead of
   // picking the small one out of the pile. Same handler, so identical behaviour.
@@ -328,6 +342,6 @@
 
 {#if $store}
   {#each $store.tiles as tile, index}
-    <Tile {tableAngle} {tile} {index} clickable={!!handlers[index]} on:click={handlers[index]} selected={$selection.has(index)} />
+    <Tile {tableAngle} {tile} {index} clickable={!!handlers[index]} on:click={handlers[index]} selected={$selection.has(index)} final={lastLap.has(index)} />
   {/each}
 {/if}

@@ -179,7 +179,7 @@
   import { WINDS, eq } from '../lib/schema.js';
   import images from './images.js';
 
-  export let tile, index, clickable = false, selected = false;
+  export let tile, index, clickable = false, selected = false, final = false;
   export let tableAngle;
 
   const dispatch = createEventDispatcher();
@@ -333,7 +333,7 @@
 </script>
 
 <div class="selection {selected ? 'selected' : ''} {drawable ? 'drawable' : ''}">
-  <div class="tile {isWildcard ? 'wildcard' : ''} {actionable ? 'actionable' : ''} {drawable ? 'drawable' : ''}" style={position}>
+  <div class="tile {isWildcard ? 'wildcard' : ''} {actionable ? 'actionable' : ''} {drawable ? 'drawable' : ''} {final ? 'final' : ''}" style={position}>
     <div class="top {clickable ? 'clickable' : ''}" on:click={() => clickable && dispatch('click', { tile, index })} />
     <div class="bottom {clickable ? 'clickable' : ''}" on:click={() => clickable && dispatch('click', { tile, index })} />
     <div class="left {clickable ? 'clickable' : ''}" on:click={() => clickable && dispatch('click', { tile, index })} />
@@ -477,6 +477,17 @@
 
     border-bottom: min(0.5vw, 0.5vh) solid var(--color-side);
     background-color: var(--color-front);
+  }
+
+  /* The tiles the 海底 round will be drawn from. They show up in the wall a few
+     draws before the round starts, so the end of the hand can be seen coming.
+     `.clickable` sets its own colours on the faces themselves, so the tile you
+     can actually draw still reads blue once the round arrives. */
+  .tile.final {
+    --color-back: #c0392b;
+    --color-side: #96281b;
+    --color-front: #e8a49c;
+    --color-front-front: #e8a49c;
   }
 
   .tile.wildcard {

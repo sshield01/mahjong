@@ -1,5 +1,6 @@
 import { WINDS, eq } from "../lib/schema.js";
 import { castIgnoreForPlayer } from "./votes.js";
+import playFinalRound from "./finalRound.js";
 
 const disconnected = new Set();
 
@@ -53,6 +54,9 @@ export function autoPlayAfterDiscard(socket, schema) {
   const nextTurn = schema.turn;
   const nextPlayer = schema[nextTurn];
   if (!nextPlayer || !isDisconnected(nextPlayer.name)) return;
+
+  // Down to the last lap: the 海底 round finishes the hand by itself.
+  if (playFinalRound(socket, schema)) return;
 
   try {
     const [drawMessage, reveal] = schema.draw(nextTurn);
