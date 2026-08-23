@@ -1,7 +1,7 @@
 import { WINDS } from "../lib/schema.js";
 import Message from "../socket/message.js";
 import sockets from "./sockets.js";
-import { autoPlayAfterDraw, isDisconnected } from "./autoplay.js";
+import { autoPlayAfterDraw, isAbsent } from "./autoplay.js";
 import playFinalRound from "./finalRound.js";
 
 const votes = new WeakMap();
@@ -54,7 +54,7 @@ export function handle(socket, schema, votes) {
       // A player who stepped away deliberately is still connected, so socket
       // liveness alone isn't enough -- without the away check they'd be handed a
       // tile and the table would sit waiting for a discard that never comes.
-      if (winnerSocket && winnerSocket.raw.connected && !isDisconnected(winnerName)) {
+      if (winnerSocket && winnerSocket.raw.connected && !isAbsent(winnerName)) {
         winnerSocket.broadcast(message);
         winnerSocket.send(message.subject, { ...message.body, reveal });
       } else {
@@ -131,7 +131,7 @@ export function cast(socket, schema, vote) {
     votes.set(schema, gameVotes);
     socket.emit(new Message("vote", { position, vote }));
     for (const wind of remaining) {
-      if (isDisconnected(schema[wind].name)) {
+      if (isAbsent(schema[wind].name)) {
         castIgnoreForPlayer(socket, schema, wind);
       }
     }

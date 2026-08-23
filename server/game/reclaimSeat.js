@@ -1,10 +1,10 @@
 import sockets from "./sockets.js";
 import Message from "../socket/message.js";
 import Schema from "../lib/schema.js";
-import { isDisconnected, markConnected } from "./autoplay.js";
+import { markConnected } from "./autoplay.js";
 import transferHostIfAway from "./hostTransfer.js";
 
-// Taking back a seat you were already playing. The session token in localStorage
+// Taking back a seat you were already playing. The session token in sessionStorage
 // handles the ordinary case (a refresh), but a player coming back on a different
 // device -- or after clearing storage -- has no token and would otherwise be
 // stuck spectating a game their own name is still sitting in.
@@ -21,13 +21,14 @@ export default async function reclaimSeat(socket, schema, { name }) {
   if (!seat) {
     throw new Error(`Nobody called ${desired} is sitting at this table.`);
   }
-  if (!isDisconnected(desired)) {
-    throw new Error(`${desired} is still connected.`);
-  }
-
+  // A live socket holding the name is the only thing that should refuse this.
+  // Gating on the away flag instead locked a room out of itself after a restart:
+  // rooms are written to disk but the flag is not, so the seats came back held
+  // by name with nobody marked away, and the server insisted everyone was still
+  // sitting there.
   const existing = sockets.get(desired);
   if (existing && existing !== socket && existing.raw.connected) {
-    throw new Error(`${desired} is already connected.`);
+    throw new Error(`${desired} is still at the table.`);
   }
   if (existing && existing !== socket) {
     sockets.delete(desired);

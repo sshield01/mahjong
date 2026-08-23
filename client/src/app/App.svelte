@@ -14,6 +14,7 @@
   import Status from './Status/Status.svelte';
   import handler from '../game/handler.js';
   import context, { init } from '../game/context.js';
+  import { loadSession, saveSession, clearSession } from '../game/session.js';
 
   export let socket;
 
@@ -49,10 +50,7 @@
     // playerDisconnected / playerConnected broadcasts.
     $absent = new Set(result.disconnected || []);
     if (result.token) {
-      localStorage.setItem(
-        'mahjong_session',
-        JSON.stringify({ token: result.token, name: result.name, room }),
-      );
+      saveSession({ token: result.token, name: result.name, room });
     }
     window.location.hash = room;
     // `AsyncSocket` throws into the message loop when the socket drops, which is
@@ -86,29 +84,21 @@
 
     // A saved session means we may already own a seat in this room -- always try
     // to reclaim it before falling back to joining fresh as a spectator.
-    const saved = localStorage.getItem('mahjong_session');
-    if (saved) {
-      let session = null;
-      try {
-        session = JSON.parse(saved);
-      } catch (error) {
-        localStorage.removeItem('mahjong_session');
-      }
-      if (session && session.token && session.room === room) {
-        for (let attempt = 0; ; attempt++) {
-          try {
-            enterGame(await socket.send('reconnect', { token: session.token }), session.room);
-            return;
-          } catch (error) {
-            // Only "Already connected." is worth waiting out; an expired session
-            // or a vanished room will never start working, so stop and join fresh.
-            if (error !== 'Already connected.' || attempt >= RECONNECT_RETRY_DELAYS.length) {
-              localStorage.removeItem('mahjong_session');
-              break;
-            }
-            state = RECONNECTING;
-            await new Promise((resolve) => setTimeout(resolve, RECONNECT_RETRY_DELAYS[attempt]));
+    const session = loadSession();
+    if (session && session.token && session.room === room) {
+      for (let attempt = 0; ; attempt++) {
+        try {
+          enterGame(await socket.send('reconnect', { token: session.token }), session.room);
+          return;
+        } catch (error) {
+          // Only "Already connected." is worth waiting out; an expired session
+          // or a vanished room will never start working, so stop and join fresh.
+          if (error !== 'Already connected.' || attempt >= RECONNECT_RETRY_DELAYS.length) {
+            clearSession();
+            break;
           }
+          state = RECONNECTING;
+          await new Promise((resolve) => setTimeout(resolve, RECONNECT_RETRY_DELAYS[attempt]));
         }
       }
     }

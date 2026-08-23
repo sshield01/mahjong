@@ -8,7 +8,7 @@ import * as handlers from "./handlers.js";
 import broadcastSchema from "./broadcastSchema.js";
 import transferHostIfAway from "./hostTransfer.js";
 import { emitCurrentVotes, castIgnoreForPlayer } from "./votes.js";
-import { markDisconnected, markConnected, isDisconnected, autoPlayAfterDraw } from "./autoplay.js";
+import { markDisconnected, markConnected, isAbsent, autoPlayAfterDraw } from "./autoplay.js";
 
 const games = new Map();
 const playersInGame = new WeakMap();
@@ -53,7 +53,7 @@ export default (io, stateDirectory) => {
   // straight away which seats are up for grabs, and kept live afterwards by the
   // playerDisconnected / playerConnected broadcasts.
   const absentPlayers = (schema) =>
-    schema.seatedPlayers().map((player) => player.name).filter(isDisconnected);
+    schema.seatedPlayers().map((player) => player.name).filter(isAbsent);
 
   async function handshake(socket) {
     for (;;) {

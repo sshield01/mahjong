@@ -1,5 +1,6 @@
 <script>
   import context from '../../game/context.js';
+  import { updateSession } from '../../game/session.js';
 
   const { socket, store, myName, absent } = context();
 
@@ -87,13 +88,7 @@
   }
 
   function rememberSession(name) {
-    const saved = localStorage.getItem('mahjong_session');
-    if (!saved) return;
-    try {
-      localStorage.setItem('mahjong_session', JSON.stringify({ ...JSON.parse(saved), name }));
-    } catch (error) {
-      // A corrupt session blob just means we reconnect as a spectator later.
-    }
+    updateSession({ name });
   }
 
   function closePrompt() {

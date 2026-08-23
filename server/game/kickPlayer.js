@@ -1,4 +1,4 @@
-import { isDisconnected, markConnected } from "./autoplay.js";
+import { isAbsent, markConnected } from "./autoplay.js";
 import transferHostIfAway from "./hostTransfer.js";
 
 // Freeing a seat whose player never came back. Only between games: mid-hand
@@ -17,7 +17,7 @@ export default async function kickPlayer(socket, schema, { position }) {
   if (player.name === socket.name) {
     throw new Error("You cannot remove yourself.");
   }
-  if (!isDisconnected(player.name)) {
+  if (!isAbsent(player.name)) {
     throw new Error(`${player.name} is still here.`);
   }
 

@@ -9,6 +9,7 @@ import {
   seedRoom,
   allWindTiles,
 } from "./helpers.js";
+import { markConnected } from "../game/autoplay.js";
 
 let server;
 const open = [];
@@ -275,7 +276,42 @@ describe("reclaiming a seat", () => {
     await send(intruder, "location", { room });
     await assert.rejects(
       () => send(intruder, "reclaimSeat", { name: "Ben7" }),
-      /still connected/,
+      /still at the table/,
+    );
+  });
+
+  // Regression: rooms are written to disk but the away flag is not, so restarting
+  // the server -- a rebuild, a redeploy -- brought a room back with its seats
+  // still held by name and nobody marked away. Gating on that flag, the server
+  // insisted everyone was still sitting there: seats could not be reclaimed or
+  // cleared and the room was locked out of itself for good. A name with no live
+  // socket behind it is unattended whatever the flag says.
+  test("a seat is reclaimable when nothing is holding it, flag or no flag", async () => {
+    const room = uniqueRoom();
+    const { a, b } = await startedTable(room, ["Ann13", "Ben13"]);
+
+    // Drop both without the disconnect bookkeeping ever running, the way a
+    // restart loses it.
+    a.close();
+    b.close();
+    await new Promise((r) => setTimeout(r, 300));
+    markConnected("Ann13");
+    markConnected("Ben13");
+
+    const returning = await client();
+    const log = record(returning);
+    const joined = await send(returning, "location", { room });
+    assert.deepEqual(
+      [...joined.disconnected].sort(),
+      ["Ann13", "Ben13"],
+      "seats nobody is holding are advertised as free to take back",
+    );
+
+    await send(returning, "reclaimSeat", { name: "Ann13" });
+    const view = await log.waitFor("start");
+    assert.ok(
+      view.body.Ton.up.every((t) => view.body.tiles[t] !== null),
+      "and the hand comes back with it",
     );
   });
 });
