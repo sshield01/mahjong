@@ -3,6 +3,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import Schema, { eq } from "../lib/schema.js";
+import Vote, { handle } from "../game/votes.js";
 
 const W = (value) => ({ suit: "wind", value });
 const D = (value) => ({ suit: "dragon", value });
@@ -164,6 +165,29 @@ describe("the eye constraint", () => {
       Schema.winningHand(schema, claimant, discarded),
       false,
       "...but not by using it as the pair, so an eyes-claim must be refused",
+    );
+  });
+});
+
+describe("resolving a vote round", () => {
+  // The wall can be spent by the time a round resolves -- there is simply no
+  // tile left to hand the winner. Throwing escaped vote resolution with the
+  // round already deleted, and on the disconnect path, which runs on the way out
+  // of a closed socket and has no message to fail, it went all the way up and
+  // killed the process: every room in memory lost because one player closed a
+  // tab while the wall happened to be empty.
+  test("a spent wall does not throw out of the round", () => {
+    const { schema, seat } = table();
+    seat("Ton", "A", { up: [T("Sou", 1)] });
+    seat("Nan", "B", { up: [T("Sou", 2)] });
+    schema.walls = []; // nothing left to draw
+    schema.turn = "Nan";
+    schema.previousTurn = "Ton";
+    schema.discarded = schema.Ton.up[0];
+
+    const socket = { emit() {}, raw: { connected: false } };
+    assert.doesNotThrow(() =>
+      handle(socket, schema, { Nan: new Vote("Draw", 1) }),
     );
   });
 });

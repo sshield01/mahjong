@@ -250,16 +250,24 @@ export default (io, stateDirectory) => {
           // A disconnecting spectator has no seat -- nothing to autoplay/ignore for.
           const position = schema.seatOf(name);
           if (position) {
-            if (schema.turn === position && schema.drawn !== undefined) {
-              autoPlayAfterDraw(socket, schema);
-            } else if (schema.turn === position && schema.drawn === undefined && schema.discarded === undefined) {
-              try {
-                const [message, reveal] = schema.draw(position);
+            // Everything in here can throw -- resolving the round can end up
+            // drawing from a wall with nothing left in it, say. There is no
+            // message to fail here, this runs on the way out of a closed socket,
+            // and an escaping error takes the whole process down with it: every
+            // room in memory lost because one player closed a tab. Keep the
+            // table's state as it stands and let the disconnect finish.
+            try {
+              if (schema.turn === position && schema.drawn !== undefined) {
+                autoPlayAfterDraw(socket, schema);
+              } else if (schema.turn === position && schema.drawn === undefined && schema.discarded === undefined) {
+                const [message] = schema.draw(position);
                 socket.emit(message);
                 autoPlayAfterDraw(socket, schema);
-              } catch (e) { /* wall exhausted */ }
-            } else {
-              castIgnoreForPlayer(socket, schema, position);
+              } else {
+                castIgnoreForPlayer(socket, schema, position);
+              }
+            } catch (error) {
+              console.error(`Could not play on for ${name}:`, error.message);
             }
           }
         }

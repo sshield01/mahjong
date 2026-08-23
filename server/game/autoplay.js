@@ -15,12 +15,22 @@ export function isDisconnected(name) {
   return disconnected.has(name);
 }
 
+// Auto-play is there so one absent player does not block everyone else. With
+// every seat away there is nobody left to unblock, and the chain
+// draw -> discard -> draw has nothing to pace it: two players stepping away for
+// a minute used to come back to a hand that had played itself out to the last
+// tile of the wall, unfinishable and unrestartable. Hold the game where it
+// stands instead and let it resume when somebody comes back.
+const nobodyPresent = (schema) =>
+  schema.seatedPlayers().every((player) => isDisconnected(player.name));
+
 export function autoPlayAfterDraw(socket, schema) {
   const position = schema.turn;
   const player = schema[position];
   if (!player || !isDisconnected(player.name)) return;
   if (schema.drawn === undefined) return;
   if (schema.completed) return;
+  if (nobodyPresent(schema)) return;
 
   const tile = pickDiscard(schema, position);
   if (tile === null) return;
@@ -32,6 +42,7 @@ export function autoPlayAfterDraw(socket, schema) {
 
 export function autoPlayAfterDiscard(socket, schema) {
   if (schema.completed) return;
+  if (nobodyPresent(schema)) return;
 
   const voters = WINDS.filter(
     (wind) => schema[wind] && schema.previousTurn !== wind,

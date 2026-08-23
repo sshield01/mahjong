@@ -34,7 +34,17 @@ export function handle(socket, schema, votes) {
 
   switch (action.method) {
     case "Draw": {
-      const [message, reveal] = schema.draw(winner);
+      // The wall can be spent by the time a round resolves -- there is simply no
+      // tile left to hand over. Throwing here escapes vote resolution with the
+      // round already deleted, and on the disconnect path, which has no message
+      // to fail, it took the whole server process down. Leave the table as it
+      // stands instead.
+      let message, reveal;
+      try {
+        [message, reveal] = schema.draw(winner);
+      } catch (error) {
+        break;
+      }
       const winnerName = schema[winner].name;
       const winnerSocket = sockets.get(winnerName);
       // A player who stepped away deliberately is still connected, so socket
@@ -137,6 +147,13 @@ export function castIgnoreForPlayer(socket, schema, position) {
 }
 
 function castAutoVoteForPlayer(socket, schema, position) {
+  // Nothing on the table to vote on. The disconnect path calls this whenever it
+  // is not the leaver's turn, which includes the middle of someone else's.
+  if (schema.discarded === undefined) return;
+  // Nobody votes on their own discard, and a vote recorded for that seat would
+  // be weighed against the real ones when the round resolves.
+  if (schema.previousTurn === position) return;
+
   const gameVotes = votes.get(schema);
   if (!gameVotes) return;
   if (gameVotes[position]) return;
@@ -168,3 +185,4 @@ class DrawVote extends Vote {
     super("Draw", 1);
   }
 }
+

@@ -129,6 +129,40 @@ describe("a player going away", () => {
     assert.ok(bensDiscard, "the round resolved instead of hanging");
   });
 
+  // Regression: auto-play is there so one absent player does not block everyone
+  // else, but nothing checked that anyone was left to unblock. With every seat
+  // away the chain draw -> discard -> draw had nothing to pace it, so two
+  // players stepping away for a minute came back to a hand that had played
+  // itself out to the last tile of the wall -- unfinishable, and unrestartable
+  // because a game that never completes cannot be followed by another.
+  test("the hand does not play itself out while every seat is away", async () => {
+    const room = uniqueRoom();
+    const { a, b } = await startedTable(room, ["Ann10", "Ben10"]);
+
+    const watcher = await client();
+    const watcherLog = record(watcher);
+    const joined = await send(watcher, "location", { room });
+    const wallSize = (view) =>
+      view.walls.reduce((n, wall) => n + wall.reduce((m, s) => m + s.length, 0), 0);
+    const before = wallSize(joined.schema);
+
+    await send(a, "leaveSeat");
+    await send(b, "leaveSeat");
+    await new Promise((r) => setTimeout(r, 800));
+
+    const after = wallSize((await send(await client(), "location", { room })).schema);
+    assert.ok(
+      before - after <= 2,
+      `the table should hold, not deal itself out (wall went ${before} -> ${after})`,
+    );
+
+    // And it is still playable when they come back.
+    await send(a, "returnSeat");
+    await send(b, "returnSeat");
+    const resumed = wallSize((await send(await client(), "location", { room })).schema);
+    assert.ok(resumed > 0, "there are still tiles to play with");
+  });
+
   test("a deliberate 暂离 hands the start button to someone present", async () => {
     const room = uniqueRoom();
     const { a, bLog } = await startedTable(room, ["Ann2", "Ben2"]);
