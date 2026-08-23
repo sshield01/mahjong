@@ -143,6 +143,8 @@ export default class Schema {
       name: previous.name,
       wind: previous.wind,
       scores: previous.scores || {},
+      // Seats rotate between games, but whoever runs the table stays the host.
+      host: previous.host,
     };
     // Dealer keeps the deal when they win -- compare against the actual dealer
     // seat, which is not necessarily Ton now that seats are chosen freely.
@@ -328,7 +330,11 @@ export default class Schema {
       return typeof tile.value === "number" && [2, 5, 8].includes(tile.value);
     }
 
-    if (eye) {
+    // `eye` is a tile index, and index 0 is a perfectly good tile -- a plain
+    // truthiness check silently dropped the constraint whenever the claimed tile
+    // happened to be the first in the deck, accepting hands that do not use it
+    // as the pair.
+    if (eye !== null && eye !== undefined) {
       const eyeTile = schema.tiles[eye];
       if (!validEye(eyeTile)) return false;
       const matching = tiles.filter((other) => eq(eyeTile, other) || isWild(other));
@@ -375,6 +381,9 @@ export default class Schema {
     this.indicator = basis.indicator;
     this.wildcard = basis.wildcard;
     this.scores = basis.scores || {};
+    // Whoever sat down first. They alone get the start button, so the table
+    // doesn't need every player to ready up individually.
+    this.host = basis.host;
   }
 
   hasSpace() {
@@ -449,6 +458,19 @@ export default class Schema {
       }
     }
 
+    // Every other wall access above wraps when `stack` runs off the end; this one
+    // did not, so whenever dealing happened to finish on the last stack of a wall
+    // -- which depends on the dice roll -- the deal crashed on `undefined.pop()`.
+    // Step to the next tile that actually exists before taking the 14th.
+    for (let guard = 0; guard <= this.walls.length * this.walls[wall].length; ++guard) {
+      if (stack >= this.walls[wall].length) {
+        stack %= this.walls[wall].length;
+        wall = (wall + 1) % 4;
+      }
+      if (this.walls[wall][stack] && this.walls[wall][stack].length > 0) break;
+      stack += 1;
+    }
+
     const draw = this.walls[wall][stack].pop();
     this.drawn = draw;
     this.source = "front";
@@ -471,29 +493,27 @@ export default class Schema {
       throw new Error(`${name} already has a seat.`);
     }
     this[position] = player(name);
-    return new Message("addPlayer", { position, name });
+    if (!this.host) {
+      this.host = name;
+    }
+    // `host` rides along so every client learns who owns the start button.
+    return new Message("addPlayer", { position, name, host: this.host });
   }
 
   removePlayer(name) {
     this.assertStarted(false);
     const position = this.playerWind(name);
     delete this[position];
-    return new Message("removePlayer", { position });
+    if (this.host === name) {
+      // Hand the start button to whoever is still here, or to the next arrival.
+      const heir = WINDS.map((wind) => this[wind]).find((player) => !!player);
+      this.host = heir ? heir.name : undefined;
+    }
+    return new Message("removePlayer", { position, host: this.host });
   }
 
-  readyPlayer(name, ready = true) {
-    this.assertStarted(false);
-    const position = this.playerWind(name);
-    this[position].ready = ready;
-    const allPlayers = WINDS.map((position) => this[position]).filter(
-      (player) => !!player,
-    );
-
-    if (allPlayers.length >= 2 && allPlayers.every((player) => player.ready)) {
-      return this.start();
-    }
-
-    return new Message("readyPlayer", { position, ready });
+  seatedPlayers() {
+    return WINDS.map((position) => this[position]).filter((player) => !!player);
   }
 
   assertStarted(started) {

@@ -1,11 +1,14 @@
 import AsyncSocket, { Disconnect } from "../socket/socket.js";
-import Schema, { WINDS } from "../lib/schema.js";
+import Message from "../socket/message.js";
+import Schema from "../lib/schema.js";
 import Fs from "fs";
 import Crypto from "crypto";
 import sockets from "./sockets.js";
 import * as handlers from "./handlers.js";
+import broadcastSchema from "./broadcastSchema.js";
+import transferHostIfAway from "./hostTransfer.js";
 import { emitCurrentVotes, castIgnoreForPlayer } from "./votes.js";
-import { markDisconnected, markConnected, autoPlayAfterDraw, autoPlayAfterDiscard } from "./autoplay.js";
+import { markDisconnected, markConnected, isDisconnected, autoPlayAfterDraw } from "./autoplay.js";
 
 const games = new Map();
 const playersInGame = new WeakMap();
@@ -41,109 +44,107 @@ export default (io, stateDirectory) => {
     return schemas;
   }
 
-  async function tryReconnect(socket) {
-    const message = await socket.recv();
-    if (message.subject === "reconnect") {
-      const { token } = message.body || {};
-      const session = token && sessions.get(token);
-      if (!session) {
-        message.fail("Session expired.");
-        return null;
-      }
-      const { name, room } = session;
-      if (sockets.has(name)) {
-        const existing = sockets.get(name);
-        if (!existing.raw.connected) {
-          sockets.delete(name);
-        } else {
-          message.fail("Already connected.");
-          return null;
-        }
-      }
-      let schemas;
-      try {
-        schemas = await loadSchema(room);
-      } catch (error) {
-        message.fail("Room no longer exists.");
-        sessions.delete(token);
-        return null;
-      }
-      const schema = schemas[schemas.length - 1];
-      // `name` may be a spectator with no seat -- that's fine, a valid session
-      // token is enough to rejoin either way.
-      socket.identify(name);
-      sockets.set(name, socket);
-      socket.join(room);
-      markConnected(name);
-      playersInGame.set(schemas, playersInGame.get(schemas) + 1);
-      message.success({ schema: Schema.concealed(schema, name), name, room, token });
-      return { name, room, schemas, token };
-    }
-    if (message.subject === "identification") {
-      return { firstMessage: message };
-    }
-    message.fail("Expected identification or reconnect.");
-    return null;
-  }
+  // One retryable loop instead of a fixed `reconnect` -> `identification` ->
+  // `location` staging. Every failure replies and keeps listening, so a client
+  // can retry any step; the old one-shot `socket.expect(...)` stages meant a
+  // failed `reconnect` left the connection parked waiting for a message the
+  // client would never send again.
+  // Seats whose player has dropped. Sent on join so an arriving client knows
+  // straight away which seats are up for grabs, and kept live afterwards by the
+  // playerDisconnected / playerConnected broadcasts.
+  const absentPlayers = (schema) =>
+    schema.seatedPlayers().map((player) => player.name).filter(isDisconnected);
 
-  async function identification(socket, firstMessage) {
-    let message = firstMessage;
+  async function handshake(socket) {
     for (;;) {
-      if (!message) {
-        message = await socket.expect("identification");
-      }
-      const name = message.body.name;
-      if (!name) {
-        message.fail("Required parameter `name` is missing.");
-        message = null;
-        continue;
-      }
-      if (sockets.has(name)) {
-        const existing = sockets.get(name);
-        if (!existing.raw.connected) {
-          sockets.delete(name);
-        } else {
-          message.fail(`The name ${name} is already in use.`);
-          message = null;
+      const message = await socket.recv();
+
+      if (message.subject === "reconnect") {
+        const { token } = message.body || {};
+        const session = token && sessions.get(token);
+        if (!session) {
+          message.fail("Session expired.");
           continue;
         }
+        const { name, room } = session;
+        if (sockets.has(name)) {
+          const existing = sockets.get(name);
+          if (!existing.raw.connected) {
+            sockets.delete(name);
+          } else {
+            message.fail("Already connected.");
+            continue;
+          }
+        }
+        let schemas;
+        try {
+          schemas = await loadSchema(room);
+        } catch (error) {
+          message.fail("Room no longer exists.");
+          sessions.delete(token);
+          continue;
+        }
+        const schema = schemas[schemas.length - 1];
+        // `name` may be a spectator with no seat -- that's fine, a valid session
+        // token is enough to rejoin either way.
+        socket.identify(name);
+        sockets.set(name, socket);
+        socket.join(room);
+        markConnected(name);
+        playersInGame.set(schemas, playersInGame.get(schemas) + 1);
+        socket.broadcast(new Message("playerConnected", { name }));
+        // Reconnecting makes this player available again; if the host is still
+        // away the role can settle here rather than leaving the table stuck.
+        transferHostIfAway(socket, schema);
+        message.success({
+          schema: Schema.concealed(schema, name),
+          name,
+          room,
+          token,
+          disconnected: absentPlayers(schema),
+        });
+        return { name, room, schemas, token };
       }
-      socket.identify(name);
-      sockets.set(name, socket);
-      message.success();
-      return name;
-    }
-  }
 
-  async function location(socket, name) {
-    for (;;) {
-      const location = await socket.expect("location");
-      const room = location.body.room;
-      if (!room) {
-        location.fail("Required parameter `room` is missing.");
-        continue;
+      if (message.subject === "location") {
+        const room = (message.body || {}).room;
+        if (!room) {
+          message.fail("Required parameter `room` is missing.");
+          continue;
+        }
+
+        let schemas, schema;
+        try {
+          schemas = await loadSchema(room);
+          schema = schemas[schemas.length - 1];
+        } catch (error) {
+          message.fail(error.message || String(error));
+          continue;
+        }
+
+        // Entering a room never asks who you are -- you arrive as an anonymous
+        // spectator and pick up a real name by sitting down (`takeSeat`). The
+        // placeholder only has to be unique, since `sockets` is keyed by it.
+        const name = `guest-${Crypto.randomBytes(8).toString("hex")}`;
+        const token = Crypto.randomBytes(16).toString("hex");
+        sessions.set(token, { name, room });
+
+        socket.identify(name);
+        sockets.set(name, socket);
+        socket.join(room);
+        playersInGame.set(schemas, playersInGame.get(schemas) + 1);
+
+        message.success({
+          schema: Schema.concealed(schema, name),
+          name,
+          room,
+          token,
+          disconnected: absentPlayers(schema),
+        });
+        return { name, room, schemas, token };
       }
 
-      let schemas, schema;
-      try {
-        schemas = await loadSchema(room);
-        schema = schemas[schemas.length - 1];
-      } catch (error) {
-        location.fail(error.message || String(error));
-        continue;
-      }
-
-      // Joining a room always succeeds, seated or not -- a full or in-progress
-      // game is watched as a spectator instead of being rejected. Claiming an
-      // actual seat is a separate, explicit `takeSeat` action.
-      const token = Crypto.randomBytes(16).toString("hex");
-      sessions.set(token, { name, room });
-
-      socket.join(room);
-      playersInGame.set(schemas, playersInGame.get(schemas) + 1);
-
-      location.success({ schema: Schema.concealed(schema, name), token });
-      return [room, schemas, token];
+      message.fail("Expected reconnect or location.");
     }
   }
 
@@ -151,43 +152,48 @@ export default (io, stateDirectory) => {
     const socket = new AsyncSocket(rawSocket, io);
     let name, room, schemas, schema, token;
     try {
-      const reconnected = await tryReconnect(socket);
-      if (reconnected && reconnected.firstMessage) {
-        name = await identification(socket, reconnected.firstMessage);
-        [room, schemas, token] = await location(socket, name);
-      } else if (reconnected) {
-        ({ name, room, schemas, token } = reconnected);
-      } else {
-        name = await identification(socket, null);
-        [room, schemas, token] = await location(socket, name);
-      }
+      ({ name, room, schemas, token } = await handshake(socket));
       let n = schemas.length - 1;
       schema = schemas[n];
       emitCurrentVotes(socket, schema);
 
       for (;;) {
         const message = await socket.recv();
+        // Seated players step to the next game deliberately, via 再来一局. A
+        // spectator has no such button and nothing to preserve in the old game,
+        // so let them follow the room forward -- otherwise this connection stays
+        // pinned to the finished schema and `takeSeat` would try to sit them in
+        // a game that has already been played.
+        if (n < schemas.length - 1 && !schema.seatOf(name)) {
+          n = schemas.length - 1;
+          schema = schemas[n];
+        }
         if (schema.completed && message.subject === "playAgain") {
           ++n;
           if (schemas.length === n) {
             schemas.push(Schema.nextGame(schema, schemas[0]));
-            // Seated players each pull the next-game schema by clicking "play
-            // again" themselves, same as before. Spectators have no such button,
-            // so without this they'd be stuck looking at the finished game
-            // forever -- push the fresh (not-yet-started) lobby to them instead.
-            const nextSchema = schemas[n];
-            const seatedNames = new Set(
-              WINDS.filter((position) => nextSchema[position]).map((position) => nextSchema[position].name),
-            );
-            for (const [viewerName, viewerSocket] of sockets) {
-              if (seatedNames.has(viewerName)) continue;
-              if (viewerSocket.game !== room) continue;
-              viewerSocket.send("start", Schema.concealed(nextSchema, viewerName));
-            }
+            // Spectators have no 再来一局 button of their own, so move them across
+            // as soon as the next game exists. Seated players cross over one at a
+            // time, as each of them asks for it.
+            broadcastSchema(schemas[n], { spectatorsOnly: true });
           }
           schema = schemas[n];
           message.success({ schema: Schema.concealed(schema, name) });
-          await handlers.ready(socket, schema, { ready: true });
+
+          // Asking for another game is also this player's vote to begin it. Once
+          // everyone still seated has asked, deal immediately -- nobody has to go
+          // back and press 开始. The host can still start early for a table that
+          // is waiting on someone slow.
+          const seat = schema.seatOf(name);
+          if (seat && !schema.started) {
+            schema[seat].ready = true;
+            socket.emit(new Message("playerReady", { name }));
+            const seated = schema.seatedPlayers();
+            if (seated.length >= 2 && seated.every((player) => player.ready)) {
+              schema.start();
+              broadcastSchema(schema);
+            }
+          }
         } else {
           try {
             message.success(
@@ -201,13 +207,31 @@ export default (io, stateDirectory) => {
             console.error(error);
             message.fail(error.message);
           }
+          // `takeSeat` renames the socket from its guest placeholder to the name
+          // the player typed. Everything below (disconnect autoplay, seat
+          // cleanup, `sockets` removal) keys off these, so they have to follow.
+          if (socket.name !== name) {
+            name = socket.name;
+            sessions.set(token, { name, room });
+          }
         }
       }
     } catch (error) {
       if (error instanceof Disconnect) {
         if (name) {
           console.log(`${name} has left`);
-          markDisconnected(name);
+          // Only players holding a seat are tracked as away. Spectators leave
+          // nothing behind, and tracking their throwaway guest names would grow
+          // this set without bound -- and, since it is keyed by bare name, could
+          // wrongly mark a later player who happens to reuse one.
+          if (schema && schema.seatOf(name)) {
+            markDisconnected(name);
+            // Tell the table the seat is now empty-but-held, so the others can
+            // see it and the player can reclaim it when they get back.
+            socket.emit(new Message("playerDisconnected", { name }));
+            // If that was the host, the start button just left with them.
+            transferHostIfAway(socket, schema);
+          }
         }
         if (schema && schema.started && !schema.completed) {
           // A disconnecting spectator has no seat -- nothing to autoplay/ignore for.
@@ -237,12 +261,10 @@ export default (io, stateDirectory) => {
         playersInGame.set(schemas, playersInGame.get(schemas) - 1);
         // A disconnecting spectator never held a seat -- only affects the
         // room's connection count (handled above), nothing to clean up here.
-        if (!schema.started && schema.hasPlayer(name)) {
-          if (schemas.length === 1) {
-            socket.broadcast(schema.removePlayer(name));
-          } else {
-            await handlers.ready(socket, schema, { ready: false });
-          }
+        // Between games the seat is kept, so a player who reloads keeps their
+        // place at the table.
+        if (!schema.started && schemas.length === 1 && schema.hasPlayer(name)) {
+          socket.broadcast(schema.removePlayer(name));
         }
         if (playersInGame.get(schemas) == 0) {
           games.delete(room);

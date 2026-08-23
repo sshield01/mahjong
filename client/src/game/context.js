@@ -6,6 +6,10 @@ const CONTEXT = Symbol();
 export function init(socket) {
   setContext(CONTEXT, {
     socket,
+    // The name the server knows us by. Mirrors `socket.name`, but as a store, so
+    // components re-resolve their seat the moment it changes -- `socket.name` is
+    // a plain property and the `addPlayer` broadcast can arrive before it updates.
+    myName: writable(null),
     store: writable(null),
     timer: writable(null),
     selection: writable(new Set()),
@@ -16,6 +20,9 @@ export function init(socket) {
     // DiscardInfo tile can offer the same claim without hunting for the small
     // tile buried in the discard pile. Null when there is nothing to claim.
     discardAction: writable(null),
+    // Names of seated players whose connection has dropped. Their seat is held
+    // for them and auto-played meanwhile; they can reclaim it by name.
+    absent: writable(new Set()),
   });
 
   window.schema = () => get(store);

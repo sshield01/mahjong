@@ -1,0 +1,55 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+  # Lets the release workflow depend on this instead of duplicating the steps,
+  # so nothing is deployed without the tests having passed.
+  workflow_call:
+
+jobs:
+  server:
+    name: Server tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.14.0"
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+      - name: Install
+        run: npm ci
+        working-directory: server
+      - name: Run tests
+        run: npm test
+        working-directory: server
+
+  client:
+    name: Client build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22.14.0"
+          cache: npm
+          cache-dependency-path: client/package-lock.json
+      - name: Install
+        run: npm ci
+        working-directory: client
+      # `client/src/lib` and `client/src/socket` are symlinks into server/. The
+      # Dockerfile copies those directories in rather than relying on the links,
+      # so do the same here and the build matches what actually ships.
+      - name: Provide shared modules
+        run: |
+          rm -rf client/src/lib client/src/socket
+          cp -r server/lib client/src/lib
+          cp -r server/socket client/src/socket
+      # Compiles every Svelte component, so a broken template or a reference to a
+      # removed export fails here rather than in someone's browser.
+      - name: Build
+        run: npm run build
+        working-directory: client

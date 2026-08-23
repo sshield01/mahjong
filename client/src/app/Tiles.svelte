@@ -6,13 +6,13 @@
 
   export let tableAngle;
 
-  const { selection, selectionSets, socket, store, timer, hasAction, discardAction } = context();
+  const { selection, selectionSets, socket, store, timer, hasAction, discardAction, myName } = context();
 
   let discarded;
   $: discarded = $store && $store.tiles[$store.discarded];
 
   let myWind;
-  $: myWind = $store && $store.seatOf(socket.name);
+  $: myWind = $store && $store.seatOf($myName);
 
   let myTurn;
   $: myTurn = $store && $store.turn === myWind;
@@ -25,19 +25,30 @@
       const storeValue = $store;
       if (storeValue) {
         if (storeValue.roll !== undefined) {
-          const [wall, stackIndex] = storeValue.nextDraw();
-          const stack = storeValue.walls[wall][stackIndex];
-          toDraw = stack[stack.length - 1];
+          // `nextDraw` throws once the wall is spent, which is exactly what
+          // happens on the last draw of a drawn game. Thrown from a reactive
+          // block that uncaught error wedges the entire client, so treat a spent
+          // wall as what it is: nothing left to draw.
+          try {
+            const [wall, stackIndex] = storeValue.nextDraw();
+            const stack = storeValue.walls[wall][stackIndex];
+            toDraw = stack[stack.length - 1];
+          } catch (error) {
+            toDraw = -1;
+          }
         } else {
           toDraw = -1;
         }
      }
   }
 
+  // Every block below reads `storeValue[myWind]`, which is undefined for a
+  // spectator. Without the `myWind &&` guard, watching a game that has a tile
+  // sitting in the discard throws mid-render and wedges the whole client.
   let exactMatches = [];
   $: {
     const storeValue = $store;
-    if (discarded && !(storeValue.wildcard && eq(discarded, storeValue.wildcard))) {
+    if (myWind && discarded && !(storeValue.wildcard && eq(discarded, storeValue.wildcard))) {
       exactMatches = storeValue[myWind].up.filter(tile => storeValue.tiles[tile].suit === discarded.suit && storeValue.tiles[tile].value === discarded.value);
     } else {
       exactMatches = [];
@@ -50,7 +61,7 @@
   let canWin = false;
   $: {
     const storeValue = $store;
-    if (discarded) {
+    if (myWind && discarded) {
       const player = { ...storeValue[myWind] };
       player.up = [...player.up, storeValue.discarded];
       // Must stay eye-constrained: this gates the 胡 that sends `win {Eyes}`, and
@@ -67,7 +78,7 @@
   $: {
     const storeValue = $store;
     const isWild = (t) => storeValue.wildcard && eq(t, storeValue.wildcard);
-    if (discarded && !isWild(discarded)) {
+    if (myWind && discarded && !isWild(discarded)) {
       if (typeof discarded.value === 'number') {
         const ofSuit = storeValue[myWind].up.filter(tile => storeValue.tiles[tile].suit === discarded.suit && !isWild(storeValue.tiles[tile]));
         const required = [

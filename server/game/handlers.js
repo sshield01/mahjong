@@ -1,4 +1,4 @@
-export { default as ready } from "./ready.js";
+export { default as startGame } from "./startGame.js";
 export { default as discard } from "./discard.js";
 export { default as draw } from "./draw.js";
 export { default as chow } from "./chow.js";
@@ -9,3 +9,7 @@ export { default as ignore } from "./ignore.js";
 export { default as declare } from "./declare.js";
 export { default as exposeWildcard } from "./exposeWildcard.js";
 export { default as takeSeat } from "./takeSeat.js";
+export { default as reclaimSeat } from "./reclaimSeat.js";
+export { default as leaveSeat } from "./leaveSeat.js";
+export { default as returnSeat } from "./returnSeat.js";
+export { default as kickPlayer } from "./kickPlayer.js";

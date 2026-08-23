@@ -37,7 +37,7 @@ function hasActions(schema, myWind) {
 
 export default async function handler(
   schema,
-  { socket, store, timer, selection, selectionSets, currentVotes },
+  { socket, store, timer, selection, selectionSets, currentVotes, absent },
 ) {
   store.set(new Schema(schema));
   for (;;) {
@@ -46,21 +46,44 @@ export default async function handler(
     const schema = new Schema(get(store));
     switch (message.subject) {
       case "addPlayer": {
-        const { position, name } = message.body;
+        const { position, name, host } = message.body;
         schema[position] = player(name);
+        if (host !== undefined) schema.host = host;
         store.set(schema);
         break;
       }
       case "removePlayer": {
-        const { position } = message.body;
+        const { position, host } = message.body;
         delete schema[position];
+        // The host may have just left, handing the start button to someone else.
+        schema.host = host;
         store.set(schema);
         break;
       }
-      case "readyPlayer": {
-        if (!schema.started) {
-          const { position, ready } = message.body;
-          schema[position].ready = ready;
+      case "hostChanged": {
+        schema.host = message.body.host;
+        store.set(schema);
+        break;
+      }
+      case "playerDisconnected": {
+        absent.update((names) => new Set(names).add(message.body.name));
+        break;
+      }
+      case "playerConnected": {
+        absent.update((names) => {
+          const next = new Set(names);
+          next.delete(message.body.name);
+          return next;
+        });
+        break;
+      }
+      case "playerReady": {
+        // Someone asked for another game. Keyed by name rather than seat, since
+        // seats rotate between games and a client still on the scoreboard is
+        // holding the previous game's layout.
+        const seat = schema.seatOf(message.body.name);
+        if (seat && schema[seat]) {
+          schema[seat].ready = true;
           store.set(schema);
         }
         break;

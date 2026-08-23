@@ -10,6 +10,7 @@
     socket,
     store,
     timer,
+    myName,
   } = context();
 
   let actions = []
@@ -21,7 +22,7 @@
 
   // This component is only mounted for a seated player, but guard `myWind`
   // being falsy anyway (e.g. a spectator) rather than throwing on $store[myWind].
-  $: myWind = $store && $store.seatOf(socket.name);
+  $: myWind = $store && $store.seatOf($myName);
   $: isWild = (t) => $store.wildcard && eq(t, $store.wildcard);
   $: concealedKongs = myWind ? $store[myWind].up
     .filter((tile, i, tiles) =>

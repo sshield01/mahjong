@@ -51,34 +51,31 @@
   const STACKS_PER_WALL = 17;
   const STACKS_WIDTH = STACKS_PER_WALL * WALL_TILE_WIDTH;
 
-  const WALL_INSET = pct(100 - STACKS_WIDTH / 8.0 * 3);
+  const WALL_INSET_PCT = 100 - STACKS_WIDTH / 8.0 * 3;
+  const WALL_INSET = pct(WALL_INSET_PCT);
+
+  // The four walls are one row rotated into place, so the ring only closes into a
+  // square if each row runs from the inner face of one neighbour to the inner
+  // face of the other. Starting it at `50 - STACKS_WIDTH / 2` made the row 52%
+  // wide where 61.75% was needed, leaving every corner open by 5.4%.
+  const WALL_START = 100 - WALL_INSET_PCT;
+  // Run each row one tile-height past the far face, so it covers the corner on
+  // its right. Every corner then belongs to exactly one wall -- the usual
+  // pinwheel -- rather than each row stopping short and the neighbour's wall
+  // jutting past your left end.
+  const WALL_SPAN = WALL_INSET_PCT + TILE_HEIGHT - WALL_START;
+  const WALL_STACK_SPACING = (WALL_SPAN - TILE_WIDTH) / (STACKS_PER_WALL - 1);
+
+  // Stacks used to carry a few pixels of extra offset each, which spread the row
+  // roughly 24px past its span at both ends -- so the wall in front of you poked
+  // out over *both* neighbours. Being pixels among percentages, no span could fix
+  // it at every table size, so the row is now purely proportional.
+  const wallRow = () => [`translate(${pct(WALL_START)}, ${WALL_INSET})`];
   const WALL_POSITION = [
-    [
-      `translate(${pct(50 - STACKS_WIDTH / 2.0)}, ${WALL_INSET})`,
-      `translateX(-${(STACKS_PER_WALL - 1) * 0.75}px)`,
-      // 'rotateZ(-15deg)',
-    ],
-    [
-      `translateX(${pct(100)})`,
-      'rotateZ(90deg)',
-      `translate(${pct(50 - STACKS_WIDTH / 2.0)}, ${WALL_INSET})`,
-      `translateX(-${(STACKS_PER_WALL - 1) * 0.75}px)`,
-      // 'rotateZ(-15deg)',
-    ],
-    [
-      `translate(${pct(100)}, ${pct(100)})`,
-      'rotateZ(180deg)',
-      `translate(${pct(50 - STACKS_WIDTH / 2.0)}, ${WALL_INSET})`,
-      `translateX(-${(STACKS_PER_WALL - 1) * 0.75}px)`,
-      // 'rotateZ(-15deg)',
-    ],
-    [
-      `translateY(${pct(100)})`,
-      'rotateZ(270deg)',
-      `translate(${pct(50 - STACKS_WIDTH / 2.0)}, ${WALL_INSET})`,
-      `translateX(-${(STACKS_PER_WALL - 1) * 0.75}px)`,
-      // 'rotateZ(-15deg)',
-    ],
+    [...wallRow()],
+    [`translateX(${pct(100)})`, 'rotateZ(90deg)', ...wallRow()],
+    [`translate(${pct(100)}, ${pct(100)})`, 'rotateZ(180deg)', ...wallRow()],
+    [`translateY(${pct(100)})`, 'rotateZ(270deg)', ...wallRow()],
   ];
 
   const HAND_SIZE = 13;
@@ -114,29 +111,50 @@
 
   const DISCARD_SIZE = 10;
   const DISCARD_INSET = pct(100 - STACKS_WIDTH / 8.0 * 3 - 2 * TILE_HEIGHT);
+
+  // The discard row used to be positioned from the *wall's* width minus two
+  // tiles, which is unrelated to how wide the row actually is, leaving it sitting
+  // noticeably left of the wall behind it.
+  //
+  // Centre it on the square the four walls enclose. Not on the wall *row*: that
+  // row deliberately runs long at one end to cover its corner, so its own centre
+  // is off to one side.
+  const SQUARE_CENTRE_PCT = (WALL_START - TILE_HEIGHT + WALL_INSET_PCT + TILE_HEIGHT) / 2;
+  const DISCARD_STAGGER_PX = 3;
+  const DISCARD_CENTRE_PX = ((DISCARD_SIZE - 1) * DISCARD_STAGGER_PX) / 2;
+
+  // Where the row's first tile goes, and the pixel nudge that cancels the row's
+  // own stagger so it stays centred at any table size.
+  const DISCARD_START =
+    SQUARE_CENTRE_PCT - ((DISCARD_SIZE - 1) * TILE_WIDTH) / 2 - TILE_WIDTH / 2;
+  const DISCARD_NUDGE_PX = -DISCARD_CENTRE_PX;
   function discardPosition(wind) {
     switch (wind) {
       case 'Ton':
         return [
-          `translate(${pct(50 - (STACKS_WIDTH - 2 * TILE_WIDTH) / 2.0)}, ${DISCARD_INSET})`,
+          `translate(${pct(DISCARD_START)}, ${DISCARD_INSET})`,
+          `translateX(${DISCARD_NUDGE_PX}px)`,
         ];
       case 'Nan':
         return [
           `translateY(${pct(100)})`,
           'rotateZ(270deg)',
-          `translate(${pct(50 - (STACKS_WIDTH - 2 * TILE_WIDTH) / 2.0)}, ${DISCARD_INSET})`,
+          `translate(${pct(DISCARD_START)}, ${DISCARD_INSET})`,
+          `translateX(${DISCARD_NUDGE_PX}px)`,
         ];
       case 'Shaa':
         return [
           `translate(${pct(100)}, ${pct(100)})`,
           'rotateZ(180deg)',
-          `translate(${pct(50 - (STACKS_WIDTH - 2 * TILE_WIDTH) / 2.0)}, ${DISCARD_INSET})`,
+          `translate(${pct(DISCARD_START)}, ${DISCARD_INSET})`,
+          `translateX(${DISCARD_NUDGE_PX}px)`,
         ];
       case 'Pei':
         return [
           `translateX(${pct(100)})`,
           'rotateZ(90deg)',
-          `translate(${pct(50 - (STACKS_WIDTH - 2 * TILE_WIDTH) / 2.0)}, ${DISCARD_INSET})`,
+          `translate(${pct(DISCARD_START)}, ${DISCARD_INSET})`,
+          `translateX(${DISCARD_NUDGE_PX}px)`,
         ];
     }
   }
@@ -152,7 +170,7 @@
   export let tableAngle;
 
   const dispatch = createEventDispatcher();
-  const { socket, store } = context();
+  const { store, myName } = context();
 
   let frontStyle;
   $: {
@@ -167,33 +185,30 @@
     }
   };
 
-  $: myWind = $store && $store.seatOf(socket.name);
+  $: myWind = $store && $store.seatOf($myName);
   $: isWildcard = tile && $store && $store.wildcard && eq(tile, $store.wildcard);
 
   function calcPosition(store) {
     if (index === store.indicator) {
+      // Pinned to the slot it was drawn from at the deal. This used to be
+      // recomputed against the *current* wall, skipping stacks as they emptied,
+      // so the indicator wandered along the wall (and sank) while kongs ate into
+      // the dead wall. The dice decide the spot once; nothing after moves it.
       const rollSum = store.roll[0] + store.roll[1] + store.roll[2];
       let w = 3 - ((rollSum + 2) % 4);
       let s = rollSum;
-      for (;;) {
-        if (s >= store.walls[w].length) {
-          s %= store.walls[w].length;
-          w = (w + 1) % 4;
-        }
-        if (s < 0) {
-          w = (w + 3) % 4;
-          s = store.walls[w].length - 1;
-        }
-        if (store.walls[w][s].length !== 0) {
-          break;
-        }
-        s -= 1;
+      if (s >= store.walls[w].length) {
+        s %= store.walls[w].length;
+        w = (w + 1) % 4;
       }
       const position = [...WALL_POSITION[w]];
-      const depth = (store.walls[w][s].length + 0.5) * TILE_DEPTH;
-      const horizontal = (STACKS_PER_WALL - s - 1) * WALL_TILE_WIDTH;
+      // Every stack is dealt two tiles high and the indicator is taken off the
+      // top, so its slot is the upper one -- flush in the wall, just face up.
+      // Purely visual: the dead-wall draw that kong uses walks `walls`, which no
+      // longer contains this tile at all, so nothing about play changes.
+      const depth = TILE_DEPTH;
+      const horizontal = (STACKS_PER_WALL - s - 1) * WALL_STACK_SPACING;
       position.push(`translateZ(${pct(depth)})`);
-      position.push(`translateX(${(STACKS_PER_WALL - s) * 3}px)`);
       position.push(`translateX(${pct(horizontal)})`);
       return `transform: ${position.join(' ')}`;
     }
@@ -204,9 +219,8 @@
         if (k === -1) continue;
         const position = [...WALL_POSITION[i]];
         const depth = k * TILE_DEPTH;
-        const horizontal = (STACKS_PER_WALL - j - 1) * WALL_TILE_WIDTH;
+        const horizontal = (STACKS_PER_WALL - j - 1) * WALL_STACK_SPACING;
         position.push(`translateZ(${pct(depth)})`);
-        position.push(`translateX(${(STACKS_PER_WALL - j) * 3}px)`)
         position.push(`translateX(${pct(horizontal)})`);
         position.push('rotateY(180deg)');
         return `transform: ${position.join(' ')}`;
@@ -265,6 +279,13 @@
         const vertical = k * TILE_HEIGHT;
         position.push(`translate(${j * 3}px, ${k * 3}px)`);
         position.push(`translate(${pct(horizontal)}, ${pct(vertical, true)})`);
+        if (actionable) {
+          // Lifted off the table and grown while it can be claimed, so the one
+          // tile that matters is obvious in a pile of look-alikes -- and a much
+          // bigger target to hit.
+          position.push(`translateZ(${pct(TILE_DEPTH * 2)})`);
+          position.push('scale(1.4)');
+        }
         return `transform: ${position.join(' ')}`;
       }
     }
@@ -272,12 +293,26 @@
     return '';
   }
 
+  // The live discard, while this player can actually claim it (chow/pong/kong/win).
+  // `clickable` is only set for tiles this player has an action on, so it already
+  // encodes "actionable" -- this just narrows it to the tile on the table.
+  $: actionable = clickable && $store && index === $store.discarded;
+
+  // The one tile in the wall this player may take. Colouring it was not enough on
+  // its own: seen along the wall it is nearly edge-on, so only a sliver shows and
+  // a hue change on a sliver is easy to miss. The scan is over the walls only, and
+  // only for a tile that is already clickable, so it costs nothing in practice.
+  $: drawable =
+    clickable &&
+    !!$store &&
+    $store.walls.some((wall) => wall.some((stack) => stack.includes(index)));
+
   let position;
-  $: position = (tableAngle, calcPosition($store));
+  $: position = (tableAngle, actionable, calcPosition($store));
 </script>
 
-<div class="selection {selected ? 'selected' : ''}">
-  <div class="tile {isWildcard ? 'wildcard' : ''}" style={position}>
+<div class="selection {selected ? 'selected' : ''} {drawable ? 'drawable' : ''}">
+  <div class="tile {isWildcard ? 'wildcard' : ''} {actionable ? 'actionable' : ''} {drawable ? 'drawable' : ''}" style={position}>
     <div class="top {clickable ? 'clickable' : ''}" on:click={() => clickable && dispatch('click', { tile, index })} />
     <div class="bottom {clickable ? 'clickable' : ''}" on:click={() => clickable && dispatch('click', { tile, index })} />
     <div class="left {clickable ? 'clickable' : ''}" on:click={() => clickable && dispatch('click', { tile, index })} />
@@ -428,5 +463,42 @@
     --color-side: #daa520;
     --color-front: #fffacd;
     --color-front-front: #fffacd;
+  }
+
+  /* Growing needs to feel immediate; the 1s default is tuned for tiles sliding
+     across the table, which reads as sluggish for a highlight. */
+  .tile.actionable {
+    transition: transform 0.2s ease-out;
+  }
+
+  /* The next tile to draw, lifted clear of the wall and rocking gently. The lift
+     goes on the wrapper, whose transform sits outside the tile's own placement, so
+     it is always straight up off the table whichever wall the tile belongs to.
+     Breaking the wall's silhouette reads from any angle, which a colour on a
+     near-edge-on face does not. */
+  .selection.drawable {
+    animation: offer 1.8s ease-in-out infinite;
+  }
+
+  @keyframes offer {
+    0%, 100% { transform: translateZ(min(1.5vw, 1.5vh)); }
+    50%      { transform: translateZ(min(3.2vw, 3.2vh)); }
+  }
+
+  /* Colour every face, not just the back. The generic clickable palette leaves the
+     four sides near-white -- the same near-white as an ordinary tile -- so from a
+     low angle, where the sides are most of what you see, it looked unchanged. */
+  .tile.drawable .clickable {
+    --color-back: #2b7fd4;
+    --color-side: #17538f;
+    --color-front: #63b3ea;
+    --color-front-front: #63b3ea;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .selection.drawable {
+      animation: none;
+      transform: translateZ(min(2.4vw, 2.4vh));
+    }
   }
 </style>

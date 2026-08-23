@@ -1,24 +1,39 @@
 <script>
   import context from '../../game/context.js';
 
-  const { socket, store } = context();
+  const { socket, store, myName } = context();
 
-  async function toggleReady() {
+  const MINIMUM_PLAYERS = 2;
+
+  // Only the host sees this, so it is the single control that starts the table --
+  // no per-player ready step.
+  $: seated = ['Ton', 'Nan', 'Shaa', 'Pei'].filter(position => $store[position]).length;
+  $: enough = seated >= MINIMUM_PLAYERS;
+
+  let starting = false;
+  let error = null;
+
+  async function start() {
+    if (!enough || starting) return;
+    starting = true;
+    error = null;
     try {
-      await socket.send('ready', {
-        ready: !$store[$store.playerWind(socket.name)].ready,
-      });
-    } catch (error) {
-      console.error(error);
+      await socket.send('startGame');
+    } catch (e) {
+      error = typeof e === 'string' ? e : (e && e.message) || 'Could not start.';
+    } finally {
+      starting = false;
     }
   }
 </script>
 
-<button class='button' on:click={toggleReady}>
-  {#if $store[$store.playerWind(socket.name)].ready}
-    取消
-  {:else}
+<button class='button' disabled={!enough || starting} on:click={start}>
+  {#if error}
+    {error}
+  {:else if enough}
     开始
+  {:else}
+    等待玩家入座
   {/if}
 </button>
 
@@ -38,5 +53,10 @@
     font-size: clamp(14pt, 4vw, 16pt);
     color: white;
     cursor: pointer;
+  }
+
+  .button:disabled {
+    opacity: 0.55;
+    cursor: default;
   }
 </style>

@@ -2,7 +2,7 @@
   import context from '../../game/context';
   import Schema, { eq } from '../../lib/schema';
 
-  const { store, socket } = context();
+  const { store, socket, myName } = context();
 
   $: winner = $store[$store.turn];
   $: allTiles = [...winner.up, ...winner.down.flat()]
@@ -210,7 +210,7 @@
     $store = new Schema(schema);
   }
 
-  $: mySeat = $store.seatOf(socket.name);
+  $: mySeat = $store.seatOf($myName);
 </script>
 
 <div class="container">
@@ -318,24 +318,44 @@
 
   .cumulative {
     margin: clamp(10px, 2vh, 20px);
-    padding-top: 12px;
+    /* Room for the sticky button: on a short screen it pins to the bottom, and
+       without this the last score rows can never be scrolled out from under it. */
+    margin-bottom: clamp(16px, 3vh, 28px);
+    padding-top: clamp(12px, 2vh, 20px);
     border-top: 1px solid rgba(255, 255, 255, 0.3);
     font-family: var(--font-chinese);
-    font-size: clamp(12pt, 3.5vw, 16pt);
+    font-size: clamp(16pt, 5vw, 24pt);
   }
 
   .cumulative-title {
     font-weight: bold;
-    margin-bottom: 8px;
-    font-size: clamp(14pt, 4vw, 18pt);
+    margin-bottom: clamp(8px, 1.5vh, 14px);
+    font-size: clamp(19pt, 5.5vw, 28pt);
+    letter-spacing: 2px;
   }
 
   .cumulative-row {
     display: flex;
     justify-content: space-between;
-    margin: 4px 0;
-    min-width: min(200px, 50vw);
-    gap: 12px;
+    align-items: baseline;
+    margin: clamp(4px, 1vh, 10px) 0;
+    min-width: min(300px, 70vw);
+    gap: clamp(12px, 4vw, 32px);
+  }
+
+  /* Long Cang is a brush face -- beautiful for the headings, but it mangles
+     digits. The totals switch to the sans face with tabular figures, so every
+     score takes the same width and the column stays aligned whatever the sign. */
+  .cumulative .player-name {
+    font-family: var(--font-english);
+    font-weight: 600;
+  }
+
+  .cumulative .player-score {
+    font-family: var(--font-english);
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    font-size: 1.15em;
   }
 
   .player-score.positive {
@@ -348,15 +368,35 @@
 
   .play-again {
     margin-top: auto;
+    /* Sticks to the bottom of the scrolling panel, so on a short screen the
+       main action stays reachable instead of hiding below the scoreboard. */
+    position: sticky;
+    bottom: 0;
+    z-index: 1;
+
     font-family: var(--font-chinese);
-    font-size: clamp(14pt, 4vw, 16pt);
-    background: rgba(255, 255, 255, 0.2);
-    color: white;
+    font-size: clamp(16pt, 4.5vw, 20pt);
+    font-weight: bold;
+    letter-spacing: 3px;
+
+    /* Was translucent white, which the bright tiles showing through the panel
+       washed out until the primary action was hard to see at all. Solid, with
+       dark text, so it reads against whatever is behind the table. */
+    background: rgba(173, 220, 145, 0.96);
+    color: #14301c;
     border: none;
-    border-top: 1px solid rgba(255, 255, 255, 0.75);
-    padding: clamp(10px, 2vh, 12px);
+    padding: clamp(12px, 2.4vh, 18px);
     cursor: pointer;
     width: 100%;
     border-radius: 0 0 8px 8px;
+    transition: background 0.15s;
+  }
+
+  .play-again:hover {
+    background: rgb(198, 235, 175);
+  }
+
+  .play-again:active {
+    background: rgb(146, 196, 116);
   }
 </style>

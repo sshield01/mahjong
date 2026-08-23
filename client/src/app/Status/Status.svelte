@@ -9,9 +9,11 @@
   import Timer from './Timer.svelte';
   import WildcardInfo from './WildcardInfo.svelte';
   import ScoreBoard from './ScoreBoard.svelte';
+  import ReclaimSeat from './ReclaimSeat.svelte';
+  import LeaveButton from './LeaveButton.svelte';
   import context from '../../game/context.js';
 
-  const { socket, store } = context();
+  const { store, myName } = context();
 
   const ORDER = {
     Ton: ['Shaa', 'Nan', 'Pei', 'Ton'],
@@ -21,7 +23,7 @@
   };
   const DEFAULT_ORDER = ['Ton', 'Nan', 'Shaa', 'Pei'];
 
-  $: mySeat = $store.seatOf(socket.name);
+  $: mySeat = $store.seatOf($myName);
 </script>
 
 {#if $store.started}
@@ -29,6 +31,11 @@
   {#if !$store.completed}
     {#if mySeat}
       <ActionButtons />
+      <LeaveButton />
+    {:else}
+      <!-- Someone watching a game their own name is still seated in: offer the
+           seat back. Only renders when a seated player is actually missing. -->
+      <ReclaimSeat />
     {/if}
   {:else}
     <GameEnd />
@@ -44,7 +51,7 @@
   <CurrentVotes />
 {:else}
   <PlayerList order={mySeat ? ORDER[mySeat] : DEFAULT_ORDER} {mySeat} />
-  {#if mySeat}
+  {#if $myName && $store.host === $myName}
     <ReadyButton />
   {/if}
 {/if}

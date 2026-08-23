@@ -1,11 +1,13 @@
 <script>
-  export let angle = 0, rotation = 0;
+  export let angle = 0, rotation = 0, scale = 1;
   export let topLabel = '', leftLabel = '', rightLabel = '', bottomLabel = '';
   export let highlightSide = null;
 </script>
 
 <div class="world">
-  <div class="table" style="transform: rotateX({angle}deg) rotateZ({rotation}deg)">
+  <!-- scale3d, not scale: a 2D scale would leave Z alone and leave the tiles
+       looking thicker than the board they sit on. -->
+  <div class="table" style="transform: rotateX({angle}deg) rotateZ({rotation}deg) scale3d({scale}, {scale}, {scale})">
     {#if topLabel}
       <div class="top-label {highlightSide === 'top' ? 'highlight' : ''}">{topLabel}</div>
     {/if}

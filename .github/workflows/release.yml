@@ -9,7 +9,12 @@ env:
   IMAGE_NAME: ${{ github.repository }}
 
 jobs:
+  # Nothing is built or deployed unless the suite passes first.
+  test:
+    uses: ./.github/workflows/test.yml
+
   release:
+    needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: read

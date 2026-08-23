@@ -19,15 +19,14 @@
 
   init(socket);
   const ctx = context();
-  const { store } = ctx;
+  const { store, myName, absent } = ctx;
 
-  let name;
   let errorMessage;
 
   const PLAY = Symbol();
-  const CREATE = Symbol();
-  const JOIN = Symbol();
+  const CONNECTING = Symbol();
   const RECONNECTING = Symbol();
+  const FAILED = Symbol();
 
   function getRoomFromUrl() {
     const hash = window.location.hash.slice(1);
@@ -41,115 +40,94 @@
     return code;
   }
 
-  async function enterRoom(room) {
-    if (!name) return;
-    errorMessage = undefined;
+  let state = CONNECTING;
 
-    try {
-      await socket.send('identification', { name });
-      socket.name = name;
-    } catch (error) {
-      errorMessage = error;
-      return;
+  function enterGame(result, room) {
+    socket.name = result.name;
+    $myName = result.name;
+    // Who was already missing before we arrived; kept current after this by the
+    // playerDisconnected / playerConnected broadcasts.
+    $absent = new Set(result.disconnected || []);
+    if (result.token) {
+      localStorage.setItem(
+        'mahjong_session',
+        JSON.stringify({ token: result.token, name: result.name, room }),
+      );
     }
-
-    try {
-      const { schema, token } = await socket.send('location', { room });
-      if (token) {
-        localStorage.setItem('mahjong_session', JSON.stringify({ token, name, room }));
-      }
-      window.location.hash = room;
-      handler(schema, ctx);
-      state = PLAY;
-    } catch (error) {
-      errorMessage = error;
-    }
+    window.location.hash = room;
+    handler(result.schema, ctx);
+    state = PLAY;
   }
 
-  function create() {
-    enterRoom(generateRoom());
-  }
-
-  function join() {
-    enterRoom(getRoomFromUrl());
-  }
-
-  let state = null;
-
-  function giveUpSession() {
-    localStorage.removeItem('mahjong_session');
-    state = getRoomFromUrl() ? JOIN : CREATE;
-  }
-
-  // A previous connection under the same name (e.g. a tab that was just refreshed)
-  // may not be cleaned up on the server yet. Once the initial `reconnect` fails,
-  // the server is permanently waiting for `identification` on this connection
-  // instead -- resending `reconnect` would just hang -- so retry by re-identifying
-  // with the saved name a few times before giving up on the session entirely.
+  // A tab that was just refreshed may still be registered on the server under the
+  // old socket, which makes `reconnect` fail with "Already connected." until it
+  // drops. The handshake is a retry loop now, so simply asking again works.
   const RECONNECT_RETRY_DELAYS = [500, 1000, 2000, 4000];
 
-  async function tryReconnect() {
+  async function connect() {
+    const room = getRoomFromUrl() || generateRoom();
+    window.location.hash = room;
+
+    // A saved session means we may already own a seat in this room -- always try
+    // to reclaim it before falling back to joining fresh as a spectator.
     const saved = localStorage.getItem('mahjong_session');
-    if (!saved) {
-      state = getRoomFromUrl() ? JOIN : CREATE;
-      return;
-    }
-    const { token, name: savedName, room: savedRoom } = JSON.parse(saved);
-    try {
-      const result = await socket.send('reconnect', { token });
-      socket.name = result.name;
-      name = result.name;
-      window.location.hash = result.room;
-      handler(result.schema, ctx);
-      state = PLAY;
-      return;
-    } catch (error) {
-      if (error !== 'Already connected.') {
-        giveUpSession();
-        return;
-      }
-    }
-
-    state = RECONNECTING;
-    // Once identification succeeds, the server is permanently parked waiting for
-    // `location` on this connection -- a repeated `identification` message would
-    // just hang unanswered -- so only resend the step that hasn't succeeded yet.
-    let identified = false;
-    for (const delay of RECONNECT_RETRY_DELAYS) {
-      await new Promise((resolve) => setTimeout(resolve, delay));
+    if (saved) {
+      let session = null;
       try {
-        if (!identified) {
-          await socket.send('identification', { name: savedName });
-          socket.name = savedName;
-          name = savedName;
-          identified = true;
-        }
-        const { schema, token: newToken } = await socket.send('location', { room: savedRoom });
-        if (newToken) {
-          localStorage.setItem('mahjong_session', JSON.stringify({ token: newToken, name: savedName, room: savedRoom }));
-        }
-        window.location.hash = savedRoom;
-        handler(schema, ctx);
-        state = PLAY;
-        return;
+        session = JSON.parse(saved);
       } catch (error) {
-        // Keep retrying until the stale connection clears or we run out of attempts.
+        localStorage.removeItem('mahjong_session');
+      }
+      if (session && session.token && session.room === room) {
+        for (let attempt = 0; ; attempt++) {
+          try {
+            enterGame(await socket.send('reconnect', { token: session.token }), session.room);
+            return;
+          } catch (error) {
+            // Only "Already connected." is worth waiting out; an expired session
+            // or a vanished room will never start working, so stop and join fresh.
+            if (error !== 'Already connected.' || attempt >= RECONNECT_RETRY_DELAYS.length) {
+              localStorage.removeItem('mahjong_session');
+              break;
+            }
+            state = RECONNECTING;
+            await new Promise((resolve) => setTimeout(resolve, RECONNECT_RETRY_DELAYS[attempt]));
+          }
+        }
       }
     }
-    giveUpSession();
-  }
 
-  tryReconnect();
-
-  function submit(event) {
-    if (event.key == 'Enter') {
-      if (state === CREATE) create();
-      else if (state === JOIN) join();
+    // No seat to reclaim: walk in and watch. Sitting down is what asks for a name.
+    try {
+      enterGame(await socket.send('location', { room }), room);
+    } catch (error) {
+      errorMessage = error;
+      state = FAILED;
     }
   }
+
+  connect();
+
+  // The three-quarter view you start at, and the straight-down one. 0 lays the
+  // table flat in the screen plane, which is why `Tile` stops standing your hand
+  // on edge at that angle -- edge-on tiles would be unreadable from above.
+  const RESTING_ANGLE = 60;
+  const TOP_ANGLE = 0;
 
   let adjustment = 0;
-  $: tableAngle = Math.min(90, Math.max(0, 60 + adjustment));
+  $: tableAngle = Math.min(90, Math.max(0, RESTING_ANGLE + adjustment));
+
+  // The board is a square of min(100vw, 100vh). At the resting angle it is
+  // foreshortened to roughly half that on screen, and that slack is what leaves
+  // the corners free for the wind and wildcard badges. Flatten the view and the
+  // square stands up to its full height, sliding under those badges and pressing
+  // your own hand into the bottom edge -- so pull it back as the view flattens.
+  // Unchanged at the resting angle and above; smallest looking straight down.
+  const TOP_VIEW_SCALE = 0.8;
+  $: tableScale = Math.min(
+    1,
+    TOP_VIEW_SCALE + (1 - TOP_VIEW_SCALE) * (tableAngle / RESTING_ANGLE),
+  );
   const SPEED = 3;
   function scroll(event) {
     if (state !== PLAY) return;
@@ -159,9 +137,13 @@
     }
   }
 
-  function resetAngle() {
+  // A double click is always "get me out of where I am": from the resting angle
+  // it drops to the top-down view, and from anywhere else -- the top view
+  // included -- it comes back to resting. So the gesture stays a single toggle
+  // and can never strand you at an angle you scrolled to by accident.
+  function toggleAngle() {
     if (state !== PLAY) return;
-    adjustment = 0;
+    adjustment = tableAngle === RESTING_ANGLE ? TOP_ANGLE - RESTING_ANGLE : 0;
   }
 
   let touchStartY = null;
@@ -176,7 +158,7 @@
     if (event.touches.length === 2) {
       const currentY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
       const delta = (currentY - touchStartY) * 0.3;
-      const newAngle = 60 + adjustment + delta * 0.5;
+      const newAngle = RESTING_ANGLE + adjustment + delta * 0.5;
       if (newAngle >= 0 && newAngle <= 90) {
         adjustment += delta * 0.5;
       }
@@ -188,11 +170,12 @@
   }
 </script>
 
-<svelte:window on:wheel={scroll} on:dblclick={resetAngle} on:touchstart={touchstart} on:touchmove={touchmove} on:touchend={touchend} />
+<svelte:window on:wheel={scroll} on:dblclick={toggleAngle} on:touchstart={touchstart} on:touchmove={touchmove} on:touchend={touchend} />
 <div class="layer full">
   <Table
     angle={state === PLAY ? tableAngle : 0}
-    rotation={$store && $store.seatOf(name) ? ['Ton', 'Nan', 'Shaa', 'Pei'].indexOf($store.seatOf(name)) * 90 : 0}
+    scale={state === PLAY ? tableScale : 1}
+    rotation={$store && $store.seatOf($myName) ? ['Ton', 'Nan', 'Shaa', 'Pei'].indexOf($store.seatOf($myName)) * 90 : 0}
     bottomLabel={$store && $store.Ton && $store.Ton.name}
     topLabel={$store && $store.Shaa && $store.Shaa.name}
     rightLabel={$store && $store.Nan && $store.Nan.name}
@@ -207,25 +190,20 @@
   <div class="layer">
     <Status />
   </div>
-{:else if state === RECONNECTING}
+{:else if state === CONNECTING || state === RECONNECTING}
   <div class="layer full title">
     <Title>
-      <div class="form info">Reconnecting...</div>
+      <div class="form info">
+        {state === RECONNECTING ? '重新连接中...' : '连接中...'}
+      </div>
     </Title>
   </div>
-{:else if state === CREATE || state === JOIN}
+{:else if state === FAILED}
   <div class="layer full title">
     <Title>
       <div class="form">
-        <input class="input" placeholder="Name" bind:value={name} on:keydown={submit} autofocus tabindex='1' />
-        {#if state === CREATE}
-          <button class="button" disabled={!name} on:click={create}>Create Room</button>
-        {:else}
-          <button class="button" disabled={!name} on:click={join}>Join Room</button>
-        {/if}
-        {#if errorMessage}
-          <div class="error">{errorMessage}</div>
-        {/if}
+        <div class="error">{errorMessage}</div>
+        <button class="button" on:click={() => window.location.reload()}>重试</button>
       </div>
     </Title>
   </div>
@@ -243,7 +221,7 @@
   height: 100%;
 }
 
-.title, .input, .button {
+.title, .button {
   color: white;
 }
 
@@ -255,17 +233,6 @@
   margin: clamp(20px, 5vh, 50px) auto;
   padding: 0 16px;
   box-sizing: border-box;
-}
-
-.input {
-  font-size: clamp(14pt, 4vw, 16pt);
-  border: none;
-  background: none;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.25);
-  padding: 12px 0;
-
-  font-family: var(--font-english);
-  width: 100%;
 }
 
 .button {
