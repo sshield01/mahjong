@@ -55,7 +55,12 @@
       );
     }
     window.location.hash = room;
-    handler(result.schema, ctx);
+    // `AsyncSocket` throws into the message loop when the socket drops, which is
+    // how the loop ends. Catch it: unhandled it just logs, and the app would go
+    // on showing a table it had stopped listening for updates to.
+    handler(result.schema, ctx).catch(() => {
+      if (state === PLAY) state = RECONNECTING;
+    });
     state = PLAY;
   }
 
@@ -64,7 +69,18 @@
   // drops. The handshake is a retry loop now, so simply asking again works.
   const RECONNECT_RETRY_DELAYS = [500, 1000, 2000, 4000];
 
+  let connecting = false;
   async function connect() {
+    if (connecting) return;
+    connecting = true;
+    try {
+      await handshake();
+    } finally {
+      connecting = false;
+    }
+  }
+
+  async function handshake() {
     const room = getRoomFromUrl() || generateRoom();
     window.location.hash = room;
 
@@ -107,6 +123,20 @@
   }
 
   connect();
+
+  // socket.io puts the transport back on its own after a blip -- a phone
+  // locking, wifi dropping, a laptop waking up. What it cannot do is tell the
+  // server who we are: that connection is brand new, with no handshake behind
+  // it, so every message sent down it came back "Expected reconnect or
+  // location." while this client sat in PLAY looking perfectly fine. Nothing
+  // worked again until the page was reloaded, which is what made a reload look
+  // like it "fixed" things. Shake hands again and pick the game back up.
+  socket.raw.on('disconnect', () => {
+    if (state === PLAY) state = RECONNECTING;
+  });
+  socket.raw.on('reconnect', () => {
+    connect();
+  });
 
   // The three-quarter view you start at, and the straight-down one. 0 lays the
   // table flat in the screen plane, which is why `Tile` stops standing your hand

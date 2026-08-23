@@ -154,8 +154,11 @@ function castAutoVoteForPlayer(socket, schema, position) {
   // be weighed against the real ones when the round resolves.
   if (schema.previousTurn === position) return;
 
-  const gameVotes = votes.get(schema);
-  if (!gameVotes) return;
+  // Open the round if this is the first vote in it, exactly as `cast` does.
+  // Giving up here instead left a discard nobody could ever answer: the player
+  // whose turn it was to take it dropped, and everyone still at the table had
+  // already had their say -- the discarder does not vote on their own tile.
+  const gameVotes = votes.get(schema) || {};
   if (gameVotes[position]) return;
 
   const vote = schema.turn === position ? new DrawVote() : new IgnoreVote();

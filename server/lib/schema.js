@@ -440,7 +440,9 @@ export default class Schema {
   playerWind(name) {
     const position = this.seatOf(name);
     if (!position) {
-      throw new Error(`No player ${name} in game ${this.game}`);
+      // The room is `name` on the schema; there has never been a `game` field,
+      // so this read `... in game undefined` every time it fired.
+      throw new Error(`No player ${name} in game ${this.name}`);
     }
     return position;
   }

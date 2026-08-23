@@ -129,6 +129,23 @@ describe("a player going away", () => {
     assert.ok(bensDiscard, "the round resolved instead of hanging");
   });
 
+  // Regression: a player drops in the window right after somebody discards, so
+  // the discard was advertised to a seat that is now empty. Nobody else can move
+  // it on -- the discarder does not vote on their own tile, and it is not their
+  // turn -- and the round is only created by the first vote cast into it, which
+  // the auto-vote used to decline to do. The table stopped dead on that discard.
+  test("a discard is still answered when the player who owes an answer drops", async () => {
+    const room = uniqueRoom();
+    const { a, b, aLog, aStart } = await startedTable(room, ["Ann12", "Ben12"]);
+
+    aLog.clear();
+    await send(a, "discard", { tile: discardableTile(aStart, "Ton") });
+    b.close();
+
+    const moved = await aLog.waitFor("draw");
+    assert.ok(moved, "the table moved on instead of stopping on the discard");
+  });
+
   // Regression: auto-play is there so one absent player does not block everyone
   // else, but nothing checked that anyone was left to unblock. With every seat
   // away the chain draw -> discard -> draw had nothing to pace it, so two
