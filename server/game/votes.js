@@ -138,6 +138,12 @@ export function cast(socket, schema, vote) {
   }
 }
 
+// The votes cast so far on the tile currently on the table, or null if no round
+// is open. Read-only, for reporting why a table is not moving.
+export function votesFor(schema) {
+  return votes.get(schema) || null;
+}
+
 export function emitCurrentVotes(socket, schema) {
   const gameVotes = votes.get(schema);
   if (!gameVotes) return;

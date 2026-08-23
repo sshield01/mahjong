@@ -6,7 +6,14 @@
 
   export let tableAngle;
 
-  const { selection, selectionSets, socket, store, timer, hasAction, discardAction, myName } = context();
+  const { selection, selectionSets, socket, store, timer, hasAction, discardAction, myName, absent } = context();
+
+  // Stepped away: the server is playing this seat, so the table should not be
+  // offering its tiles. Without this an away player's own screen still lit up
+  // the wall tile to draw and let them claim discards -- a hand being played
+  // for them, holding out affordances to somebody who is not there.
+  let away;
+  $: away = $absent.has($myName);
 
   let discarded;
   $: discarded = $store && $store.tiles[$store.discarded];
@@ -102,7 +109,8 @@
   $: {
     const list = [];
     const storeValue = $store;
-    if (myWind) {
+    // Nothing is on offer to a seat that is being played for it.
+    if (myWind && !away) {
       const pongs = [];
       if (exactMatches.length === 2) {
         pongs.push(exactMatches);
@@ -226,7 +234,7 @@
   $: {
     const storeValue = $store;
     if (storeValue) {
-      if (storeValue.completed) {
+      if (storeValue.completed || away) {
         handlers = [];
       } else {
         handlers = storeValue.tiles.map((tile, index) => {

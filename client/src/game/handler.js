@@ -124,6 +124,16 @@ export default async function handler(
             const action = schema.turn === myWind ? "draw" : "ignore";
             socket.send(action).catch(() => {});
           };
+          // Away means away. Every branch below is about giving a player time to
+          // decide, and the one for your own turn hands the table over to you
+          // and waits indefinitely -- which is the last thing to do for someone
+          // who has said they are not here. Answer at once and let the server
+          // play the seat.
+          if (get(absent).has(socket.name)) {
+            fallback();
+            break;
+          }
+
           const iHaveClaim = hasActions(schema, myWind);
           if (schema.turn === myWind && iHaveClaim) {
             // My turn and a real choice of my own (chow/pong/win): no auto-vote,

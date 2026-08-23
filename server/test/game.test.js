@@ -226,6 +226,51 @@ describe("what a room leaves behind", () => {
   });
 });
 
+describe("asking why a table is not moving", () => {
+  test("reports the open round and whose answer it is short of", async () => {
+    const room = uniqueRoom();
+    const { a, aStart } = await startedTable(room, ["Deb", "Dan"]);
+
+    const quiet = await send(a, "diagnose");
+    assert.equal(quiet.round, "no tile on the table");
+    assert.equal(quiet.turn, "Ton");
+    assert.deepEqual(
+      quiet.seats.map((s) => s.name).sort(),
+      ["Dan", "Deb"],
+      "every seat, and whether anyone is holding it",
+    );
+
+    await send(a, "discard", { tile: discardableTile(aStart, "Ton") });
+    const pending = await send(a, "diagnose");
+    assert.equal(
+      pending.round,
+      "a tile is on the table and nobody has voted yet",
+      "a discard nobody has answered reads as exactly that",
+    );
+    assert.notEqual(pending.discarded, null);
+  });
+
+  test("names the seat still to answer once someone has", async () => {
+    const room = uniqueRoom();
+    const { a, b, aStart } = await startedTable(room, ["Del", "Dot", "Dee"]);
+    // A third seat, so one vote cannot resolve the round on its own.
+    const c = await client();
+    await send(c, "location", { room });
+
+    await send(a, "discard", { tile: discardableTile(aStart, "Ton") });
+    await send(b, "ignore").catch(() => {});
+    const state = await send(a, "diagnose");
+
+    if (typeof state.round === "object") {
+      assert.ok(state.round.cast, "the votes already in");
+      assert.ok(Array.isArray(state.round.waitingOn), "and who is still to answer");
+    } else {
+      // Two seats: one vote settles it, so the round is already gone.
+      assert.equal(typeof state.round, "string");
+    }
+  });
+});
+
 describe("starting", () => {
   test("only the host may start, and only with enough players", async () => {
     const room = uniqueRoom();

@@ -13,3 +13,4 @@ export { default as reclaimSeat } from "./reclaimSeat.js";
 export { default as leaveSeat } from "./leaveSeat.js";
 export { default as returnSeat } from "./returnSeat.js";
 export { default as kickPlayer } from "./kickPlayer.js";
+export { default as diagnose } from "./diagnose.js";
