@@ -1,7 +1,7 @@
 import Schema, { player, eq } from "../lib/schema.js";
 import { get } from "svelte/store";
 
-const TIMER_DURATION = 4000;
+const TIMER_DURATION = 6000;
 
 function hasActions(schema, myWind) {
   if (!myWind) return false; // a spectator has no hand to act with

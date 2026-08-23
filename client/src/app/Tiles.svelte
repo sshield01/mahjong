@@ -111,15 +111,25 @@
     const storeValue = $store;
     // Nothing is on offer to a seat that is being played for it.
     if (myWind && !away) {
+      // `tiles` is what has to be selected for the offer to appear; `meld` is
+      // what the action actually consumes. They come apart when you hold three
+      // copies: the server melds the first two matching tiles itself, so which
+      // pair you "pick" changes nothing -- offering all three pairings was busy
+      // work for a choice that does not exist.
+      //
+      // 碰 versus 杠 on the other hand is a real decision, and one worth having.
+      // Konging spends all four; ponging leaves the third copy in hand, to be
+      // added to the meld later as an exposed 杠 -- which draws a replacement
+      // tile and so puts 杠上花 in reach. Both therefore hang off the same
+      // selection of all three tiles, because the buttons only render for a
+      // selection matching a set exactly: a 2-tile pong set could never show
+      // beside the 3-tile kong one, which is why 碰 was previously unreachable
+      // without knowing to deselect a tile first.
       const pongs = [];
       if (exactMatches.length === 2) {
-        pongs.push(exactMatches);
+        pongs.push({ tiles: exactMatches, meld: exactMatches });
       } else if (exactMatches.length === 3) {
-        pongs.push(...[
-          [exactMatches[0], exactMatches[1]],
-          [exactMatches[1], exactMatches[2]],
-          [exactMatches[2], exactMatches[0]],
-        ]);
+        pongs.push({ tiles: exactMatches, meld: exactMatches.slice(0, 2) });
         list.push({
           tiles: exactMatches,
           label: '杠',
@@ -135,7 +145,7 @@
         });
       }
 
-      for (const tiles of pongs) {
+      for (const { tiles, meld } of pongs) {
         list.push({
           tiles,
           label: '碰',
@@ -150,9 +160,12 @@
           },
         });
 
+        // Simulate the meld, not the selection -- with three copies the pong
+        // takes two and the third stays in hand, and a win has to be judged on
+        // the hand that actually results.
         const player = { ...storeValue[myWind] };
-        player.up = player.up.filter(tile => !tiles.includes(tile));
-        player.down = [...player.down, [...tiles, storeValue.discarded]];
+        player.up = player.up.filter(tile => !meld.includes(tile));
+        player.down = [...player.down, [...meld, storeValue.discarded]];
         if (Schema.winningHand(storeValue, player)) {
           list.push({
             tiles,
