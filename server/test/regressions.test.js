@@ -2,7 +2,7 @@
 // commit it locks down, so the intended rule is traceable to when it was decided.
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import Schema from "../lib/schema.js";
+import Schema, { eq } from "../lib/schema.js";
 
 const W = (value) => ({ suit: "wind", value });
 const D = (value) => ({ suit: "dragon", value });
@@ -168,6 +168,119 @@ describe("the eye constraint", () => {
   });
 });
 
+describe("claiming a discard as the pair", () => {
+  // Reported from play: 1-2-3萬 in hand with 6-7-8萬 melded, 7-7-7索, a spare 8索,
+  // the wildcard (南), and 東東. Ton throws the 8索: it pairs the spare while the
+  // wildcard fills out 東東東, so the hand wins outright. The claim was refused
+  // anyway -- the tile would not highlight, and because the unconstrained check
+  // still saw the win the table paused for a claim that could not be made.
+  function wildcardInHandClaim() {
+    const { schema, seat } = table();
+    schema.wildcard = W("Nan");
+    seat("Ton", "A", { up: [T("Sou", 8)] });
+    seat("Nan", "B", {
+      up: [
+        T("Man", 1), T("Man", 2), T("Man", 3),
+        T("Sou", 7), T("Sou", 7), T("Sou", 7),
+        T("Sou", 8),
+        W("Nan"), // the wildcard, standing in for a third 東
+        W("Ton"), W("Ton"),
+      ],
+      down: [[T("Man", 6), T("Man", 7), T("Man", 8)]],
+    });
+    schema.turn = "Ton";
+    schema.discard("A", schema.Ton.up[0]);
+    return schema;
+  }
+
+  test("a wildcard in hand does not hide the pair the claim would make", () => {
+    const schema = wildcardInHandClaim();
+    const claimant = { ...schema.Nan, up: [...schema.Nan.up, schema.discarded] };
+
+    assert.equal(
+      Schema.winningHand(schema, claimant),
+      true,
+      "sanity: the hand does win with that tile",
+    );
+    assert.equal(
+      Schema.winningHand(schema, claimant, schema.discarded),
+      true,
+      "...by pairing it, so the eyes claim has to be allowed",
+    );
+    assert.doesNotThrow(() => schema.eyes("Nan", false));
+  });
+
+  // `eyes()` moves a specific tile into the meld, so it asks `eyePartner` which
+  // one rather than taking the first thing that matches. The wildcard is left
+  // where it is more interesting to look at -- inside a meld -- and a real copy
+  // is always available to pair with when one is in hand: a wildcard is at least
+  // as flexible as the tile it stands in for, so whenever pairing with one wins,
+  // pairing with a real copy wins too.
+  test("the pair is made from a real copy, not the wildcard, when either would do", () => {
+    // Three 5索 and the wildcard, so the claimed 5索 can pair with either: the
+    // leftovers meld as 5索5索+wildcard, or as 5索5索5索. Both win, so the choice
+    // is free and has to land on the real copy.
+    const { schema, seat } = table();
+    schema.wildcard = W("Nan");
+    seat("Ton", "A", { up: [T("Sou", 5)] });
+    seat("Nan", "B", {
+      up: [
+        T("Sou", 5), T("Sou", 5), T("Sou", 5),
+        W("Nan"),
+        T("Man", 1), T("Man", 2), T("Man", 3),
+        T("Man", 7), T("Man", 8), T("Man", 9),
+      ],
+    });
+    schema.turn = "Ton";
+    schema.discard("A", schema.Ton.up[0]);
+
+    const wildcard = schema.Nan.up.find((t) => eq(schema.tiles[t], W("Nan")));
+    const player = { ...schema.Nan, up: [...schema.Nan.up, schema.discarded] };
+    const partner = Schema.eyePartner(schema, player, schema.discarded);
+
+    assert.ok(
+      eq(schema.tiles[partner], T("Sou", 5)),
+      "a spare 5索 pairs the claim, not the wildcard",
+    );
+
+    const claimed = schema.discarded;
+    const message = schema.eyes("Nan", false);
+    assert.deepEqual(message.body.eyes, [partner, claimed], "5索 + 5索 is what gets melded");
+    assert.ok(
+      schema.Nan.up.includes(wildcard),
+      "the wildcard stays in hand rather than being spent on the pair",
+    );
+  });
+
+  // The other half of the rule: the pair has to be the *claimed* tile. Dropping
+  // two tiles that merely match, and leaving the claimed one among the melds,
+  // would let a hand that only wins on a run through as an eyes claim.
+  test("a hand that wins on a run is still not an eyes claim", () => {
+    const { schema, seat } = table();
+    schema.wildcard = W("Nan");
+    seat("Ton", "A", { up: [T("Sou", 2)] });
+    seat("Nan", "B", {
+      up: [
+        T("Sou", 1), T("Sou", 3), // Sou2 completes this run, it is not the pair
+        T("Sou", 4), T("Sou", 5), T("Sou", 6),
+        T("Sou", 7), T("Sou", 8),
+        W("Nan"), // fills in for Sou9
+        T("Pin", 5), T("Pin", 5), // the real pair
+      ],
+    });
+    schema.turn = "Ton";
+    schema.discard("A", schema.Ton.up[0]);
+
+    const claimant = { ...schema.Nan, up: [...schema.Nan.up, schema.discarded] };
+    assert.equal(Schema.winningHand(schema, claimant), true, "the hand does win");
+    assert.equal(
+      Schema.winningHand(schema, claimant, schema.discarded),
+      false,
+      "but not by pairing the discard, so eyes must still be refused",
+    );
+  });
+});
+
 describe("claiming a discard to complete 七对", () => {
   // Six pairs and a lone Man7, with Ton throwing the Man7. Deliberately a shape
   // where the discard could also be chowed (5/6 and 6/8 are both in hand) --
@@ -281,6 +394,83 @@ describe("scoring", () => {
     const doubled = (base + bonuses) * 2; /* 无癞子 */
     const fourOfAKind = 2 ** 3; /* Ton, Nan, Shaa each appear four times */
     assert.equal(withCombo, doubled * fourOfAKind);
+  });
+
+  // The same rule, on a win claimed from a discard rather than self-drawn.
+  //
+  // `eyes()` records the claimed pair as a two-tile group in `down`, which
+  // leaves `up` one short of the 3n+2 shape `winningHand` will even look at. The
+  // face-value re-check therefore answered "no" for every win claimed on a
+  // discard, whatever the wildcards were actually doing, so 无癞子 was never
+  // awarded on one.
+  //
+  // 南南南 here is a plain triplet -- the hand does not lean on the wildcard at
+  // all -- so it has to score exactly as it would with no wildcard in sight.
+  function claimedTripleSouth() {
+    const { schema, seat } = table();
+    schema.wildcard = W("Nan");
+    seat("Ton", "A", { up: [T("Sou", 5)] });
+    seat("Nan", "B", {
+      up: [
+        W("Nan"), W("Nan"), W("Nan"),
+        T("Man", 1), T("Man", 2), T("Man", 3),
+        T("Man", 7), T("Man", 8), T("Man", 9),
+        T("Sou", 5),
+      ],
+    });
+    schema.turn = "Ton";
+    schema.discard("A", schema.Ton.up[0]);
+    schema.eyes("Nan", false);
+    return schema;
+  }
+
+  test("a wildcard at face value counts as wildcard-free on a claimed win too", () => {
+    const held = claimedTripleSouth();
+    const withWildcardHeld = held.computeRoundScore("Nan").calcLoserScore(false, true, 0);
+
+    // The same hand scored as though that tile were never the wildcard.
+    const baseline = claimedTripleSouth();
+    baseline.wildcard = T("Pin", 9); // held by nobody
+    const withNoWildcardAtAll = baseline
+      .computeRoundScore("Nan")
+      .calcLoserScore(false, true, 0);
+
+    assert.equal(
+      withWildcardHeld,
+      withNoWildcardAtAll,
+      "holding the wildcard but not relying on it keeps the 无癞子 doubling",
+    );
+  });
+
+  test("a wildcard actually standing in for a tile does not get the doubling", () => {
+    const { schema, seat } = table();
+    schema.wildcard = W("Nan");
+    seat("Ton", "A", { up: [T("Sou", 8)] });
+    seat("Nan", "B", {
+      up: [
+        T("Man", 1), T("Man", 2), T("Man", 3),
+        T("Sou", 7), T("Sou", 7), T("Sou", 7),
+        T("Sou", 8),
+        W("Nan"), // filling in for a third 東
+        W("Ton"), W("Ton"),
+      ],
+      down: [[T("Man", 6), T("Man", 7), T("Man", 8)]],
+    });
+    schema.turn = "Ton";
+    schema.discard("A", schema.Ton.up[0]);
+    schema.eyes("Nan", false);
+
+    const leaning = schema.computeRoundScore("Nan").calcLoserScore(false, true, 0);
+    schema.wildcard = T("Pin", 9);
+    const asIfWildcardFree = schema
+      .computeRoundScore("Nan")
+      .calcLoserScore(false, true, 0);
+
+    assert.ok(
+      leaning < asIfWildcardFree,
+      `a hand leaning on the wildcard scores below the wildcard-free version ` +
+        `(${leaning} vs ${asIfWildcardFree})`,
+    );
   });
 
   // bd20e1c "If the wildcard tiles are used as their face value, it is scored

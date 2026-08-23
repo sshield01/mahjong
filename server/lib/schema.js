@@ -94,6 +94,52 @@ function* walls(length) {
 const sum = (arr) => arr.reduce((a, b) => a + b);
 export const eq = (a, b) => a.suit === b.suit && a.value === b.value;
 
+function melds(a, b, c) {
+  if (eq(a, b) && eq(b, c)) return true;
+  if (a.suit !== b.suit || b.suit !== c.suit || typeof a.value !== "number")
+    return false;
+  const values = [a.value, b.value, c.value].sort();
+  return values[0] === values[1] - 1 && values[1] === values[2] - 1;
+}
+
+function meldsWithWild(a, b, c, isWild) {
+  const wilds = [a, b, c].filter(isWild).length;
+  const normals = [a, b, c].filter((t) => !isWild(t));
+  if (wilds === 3 || wilds === 2) return true;
+  if (wilds === 1) {
+    const [x, y] = normals;
+    if (eq(x, y)) return true;
+    if (x.suit === y.suit && typeof x.value === "number") {
+      const diff = Math.abs(x.value - y.value);
+      if (diff === 1 || diff === 2) return true;
+    }
+    return false;
+  }
+  return melds(a, b, c);
+}
+
+// Can these tiles be split into threes, every one of them a run or a triplet?
+// Lifted out of `winningHand` so `eyePartner` can ask the same question -- one
+// answers "does this win", the other "which tile made it win", and they must not
+// drift apart.
+function allMeld(tiles, isWild) {
+  if (tiles.length === 0) return true;
+  for (let i = 0; i < tiles.length - 2; ++i) {
+    for (let j = i + 1; j < tiles.length - 1; ++j) {
+      for (let k = j + 1; k < tiles.length; ++k) {
+        if (meldsWithWild(tiles[i], tiles[j], tiles[k], isWild)) {
+          const rest = [...tiles];
+          rest.splice(k, 1);
+          rest.splice(j, 1);
+          rest.splice(i, 1);
+          if (allMeld(rest, isWild)) return true;
+        }
+      }
+    }
+  }
+  return false;
+}
+
 function allPairs([...tiles], wildcard) {
   const isWild = (t) => wildcard && eq(t, wildcard);
   let wilds = tiles.filter(isWild).length;
@@ -182,52 +228,6 @@ export default class Schema {
 
   static winningHand(schema, player, eye = null) {
     const isWild = (t) => schema.wildcard && eq(t, schema.wildcard);
-
-    function allMeld(tiles) {
-      function melds(a, b, c) {
-        if (eq(a, b) && eq(b, c)) return true;
-        if (
-          a.suit !== b.suit ||
-          b.suit !== c.suit ||
-          typeof a.value !== "number"
-        )
-          return false;
-        const values = [a.value, b.value, c.value].sort();
-        return values[0] === values[1] - 1 && values[1] === values[2] - 1;
-      }
-
-      function meldsWithWild(a, b, c) {
-        const wilds = [a, b, c].filter(isWild).length;
-        const normals = [a, b, c].filter((t) => !isWild(t));
-        if (wilds === 3 || wilds === 2) return true;
-        if (wilds === 1) {
-          const [x, y] = normals;
-          if (eq(x, y)) return true;
-          if (x.suit === y.suit && typeof x.value === "number") {
-            const diff = Math.abs(x.value - y.value);
-            if (diff === 1 || diff === 2) return true;
-          }
-          return false;
-        }
-        return melds(a, b, c);
-      }
-
-      if (tiles.length === 0) return true;
-      for (let i = 0; i < tiles.length - 2; ++i) {
-        for (let j = i + 1; j < tiles.length - 1; ++j) {
-          for (let k = j + 1; k < tiles.length; ++k) {
-            if (meldsWithWild(tiles[i], tiles[j], tiles[k])) {
-              const rest = [...tiles];
-              rest.splice(k, 1);
-              rest.splice(j, 1);
-              rest.splice(i, 1);
-              if (allMeld(rest)) return true;
-            }
-          }
-        }
-      }
-      return false;
-    }
 
     const hand = player.up;
 
@@ -335,14 +335,17 @@ export default class Schema {
     // happened to be the first in the deck, accepting hands that do not use it
     // as the pair.
     if (eye !== null && eye !== undefined) {
-      const eyeTile = schema.tiles[eye];
-      if (!validEye(eyeTile)) return false;
-      const matching = tiles.filter((other) => eq(eyeTile, other) || isWild(other));
-      if (matching.length < 2) return false;
-      const remaining = [...tiles];
-      remaining.splice(remaining.indexOf(matching[0]), 1);
-      remaining.splice(remaining.indexOf(matching[1]), 1);
-      if (allMeld(remaining)) return true;
+      if (!validEye(schema.tiles[eye])) return false;
+      // The eye is the claimed tile plus one partner out of the hand: another
+      // copy of it, or a wildcard standing in for one.
+      //
+      // This used to collect the tiles that merely *matched* and drop the first
+      // two of them, which is not the same thing: with a spare copy and a
+      // wildcard both in hand it removed those two and left the claimed tile
+      // itself to be melded. A hand that wins outright by pairing the claimed
+      // tile was refused on that alone -- and, since the unconstrained check
+      // still saw the win, the table paused for a claim that could not be made.
+      return Schema.eyePartner(schema, player, eye) !== undefined;
     } else {
       for (let i = 0; i < tiles.length; i++) {
         if (!validEye(tiles[i])) continue;
@@ -352,11 +355,40 @@ export default class Schema {
           const remaining = [...tiles];
           remaining.splice(j, 1);
           remaining.splice(i, 1);
-          if (allMeld(remaining)) return true;
+          if (allMeld(remaining, isWild)) return true;
         }
       }
       return false;
     }
+  }
+
+  // Which tile in `player`'s hand pairs with the claimed tile `eye` to leave a
+  // hand that melds? Returns that tile, or undefined when no arrangement singles
+  // one out -- a 七对 win, say, where the pair is simply the seventh pair and the
+  // rest never melds into threes at all.
+  //
+  // `winningHand` only answers yes or no; `eyes()` has to move a specific tile
+  // into the meld, so it asks here instead of assuming.
+  //
+  // Real copies are tried before wildcards. A wildcard is at least as flexible
+  // as the tile it stands in for, so whenever pairing with one wins, pairing
+  // with a real copy wins too -- which leaves the wildcard where it is more
+  // interesting to look at, inside a meld.
+  static eyePartner(schema, player, eye) {
+    const isWild = (tile) => schema.wildcard && eq(tile, schema.wildcard);
+    const eyeTile = schema.tiles[eye];
+    const rest = player.up.filter((tile) => tile !== eye);
+    const matches = rest.filter((tile) => eq(eyeTile, schema.tiles[tile]));
+    const wildcards = rest.filter(
+      (tile) => !eq(eyeTile, schema.tiles[tile]) && isWild(schema.tiles[tile]),
+    );
+    for (const candidate of [...matches, ...wildcards]) {
+      const remaining = rest
+        .filter((tile) => tile !== candidate)
+        .map((tile) => schema.tiles[tile]);
+      if (allMeld(remaining, isWild)) return candidate;
+    }
+    return undefined;
   }
 
   constructor(basis = {}) {
@@ -746,15 +778,26 @@ export default class Schema {
       throw new Error("You may not pick up eyes if it does not win the game.");
     }
     const tile = this.discarded;
-    let i = this[position].up.findIndex((tile) =>
-      eq(this.tiles[tile], discard),
-    );
-    if (i === -1 && this.wildcard) {
-      i = this[position].up.findIndex((tile) =>
-        eq(this.tiles[tile], this.wildcard),
-      );
+    // Take the partner the win actually needs, when the melds pick one out.
+    let partner = Schema.eyePartner(this, player, this.discarded);
+    if (partner === undefined) {
+      // Nothing in the melds singles one out -- a 七对 win lands here, where the
+      // pair is simply the seventh pair. Any match will do, and a real copy is
+      // preferred over spending the wildcard on it.
+      partner = this[position].up.find((tile) => eq(this.tiles[tile], discard));
+      if (partner === undefined && this.wildcard) {
+        partner = this[position].up.find((tile) =>
+          eq(this.tiles[tile], this.wildcard),
+        );
+      }
     }
-    const [leftEye] = this[position].up.splice(i, 1);
+    if (partner === undefined) {
+      throw new Error("You have nothing to pair that tile with.");
+    }
+    const [leftEye] = this[position].up.splice(
+      this[position].up.indexOf(partner),
+      1,
+    );
 
     this[this.previousTurn].discarded.pop();
     const eyes = [leftEye, this.discarded];
@@ -947,8 +990,21 @@ export default class Schema {
     const hasNoWildcard = (() => {
       if (!this.wildcard) return true;
       if (!allTiles.some((t) => eq(t, this.wildcard))) return true;
+      // Ask the same hand that was just validated. `eyes()` records the claimed
+      // pair as a two-tile group in `down`, which leaves `up` one short of the
+      // 3n+2 shape `winningHand` will even look at -- so this re-check answered
+      // "no" for every discard-pair win, no matter what the wildcards were
+      // doing, and 无癞子 was never awarded on one. Fold that pair back in.
+      const pair = winner.down.find((meld) => meld.length === 2);
+      const restored = pair
+        ? {
+            ...winner,
+            up: [...winner.up, ...pair],
+            down: winner.down.filter((meld) => meld !== pair),
+          }
+        : winner;
       const noWildSchema = { ...this, wildcard: null };
-      return Schema.winningHand(noWildSchema, winner);
+      return Schema.winningHand(noWildSchema, restored);
     })();
     const kongCount = winner.down.filter((meld) => meld.length >= 5).length;
     const pairsFourOfAKind = (() => {
