@@ -149,6 +149,7 @@
           list.push({
             tiles,
             label: '胡',
+            win: true,
             async handler() {
               try {
                 await socket.send('win', { method: 'Pong' });
@@ -184,6 +185,7 @@
         list.push({
           tiles: eyeTile !== undefined ? [eyeTile] : [],
           label: '胡',
+          win: true,
           async handler() {
             try {
               await socket.send('win', { method: 'Eyes' });
@@ -205,6 +207,7 @@
       list.push(...canChow.filter(willWin).map(tiles => ({
         tiles,
         label: '胡',
+        win: true,
         async handler() {
           try {
             await socket.send('win', { method: 'Chow', tiles });
@@ -281,7 +284,18 @@
                     if (handle) {
                       window.clearTimeout(handle);
                     }
-                    if (combos.length === 1) {
+                    // A win beats everything else on offer, so pick its tiles for
+                    // the player. Without this, a hand that can both 胡 and 吃 the
+                    // same discard -- the ordinary shape for 七对, whose pairs sit
+                    // on neighbouring numbers -- offers several different tile
+                    // combinations, so nothing was selected, no button appeared,
+                    // and the click looked like it did nothing at all. Only the
+                    // in-turn player is offered 吃, which is exactly why the win
+                    // stayed reachable in one click from every other seat.
+                    const winning = $selectionSets.filter(set => set.win);
+                    if (winning.length > 0) {
+                      selection.set(new Set(winning[0].tiles));
+                    } else if (combos.length === 1) {
                       // Multiple labeled actions (e.g. Pong and Win) share the one
                       // unambiguous set of tiles -- no need to make the player
                       // re-click their own hand tiles just to choose between them;

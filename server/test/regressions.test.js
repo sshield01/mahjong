@@ -168,6 +168,68 @@ describe("the eye constraint", () => {
   });
 });
 
+describe("claiming a discard to complete 七对", () => {
+  // Six pairs and a lone Man7, with Ton throwing the Man7. Deliberately a shape
+  // where the discard could also be chowed (5/6 and 6/8 are both in hand) --
+  // that is the ordinary look of a numbered seven-pair hand, and it is what made
+  // the in-turn player, the only seat offered 吃, unable to take the win.
+  function sevenPairsClaim() {
+    const { schema, seat } = table();
+    schema.wildcard = T("Pin", 9); // held by nobody, so no wildcard help
+    seat("Ton", "A", { up: [T("Man", 7)] });
+    seat("Nan", "B", {
+      up: [
+        T("Man", 1), T("Man", 1),
+        T("Man", 2), T("Man", 2),
+        T("Man", 3), T("Man", 3),
+        T("Man", 5), T("Man", 5),
+        T("Man", 6), T("Man", 6),
+        T("Man", 8), T("Man", 8),
+        T("Man", 7),
+      ],
+    });
+    schema.turn = "Ton";
+    schema.discard("A", schema.Ton.up[0]);
+    return schema;
+  }
+
+  test("the discard completing seven pairs is a valid eyes claim", () => {
+    const schema = sevenPairsClaim();
+    const claimant = { ...schema.Nan, up: [...schema.Nan.up, schema.discarded] };
+    // The eye-constrained call is what gates the client's 胡 button; seven pairs
+    // has to satisfy it even though the discard is not being used as the eye of
+    // a melded hand.
+    assert.equal(
+      Schema.winningHand(schema, claimant, schema.discarded),
+      true,
+      "七对 must be claimable on the discard that completes it",
+    );
+  });
+
+  // `eyes()` finishes the game on its own: completes it, scores it, and returns
+  // the win message. The vote handler used to run the generic win step after it
+  // as well, which asked `winningHand` about the 12 tiles left once the pair had
+  // moved into `down` -- never a winning shape. A claim that had already gone
+  // through came back as "You do not have a valid winning hand", and only that
+  // throw stopped the round being scored a second time.
+  test("eyes() completes and scores the round by itself", () => {
+    const schema = sevenPairsClaim();
+    const message = schema.eyes("Nan", false);
+
+    assert.equal(message.subject, "win");
+    assert.equal(message.body.position, "Nan");
+    assert.equal(schema.completed, true);
+    assert.ok(schema.scores.B > 0, "the claimant is paid");
+    assert.equal(schema.scores.A, -schema.scores.B, "and the discarder pays");
+
+    assert.equal(
+      Schema.winningHand(schema, schema.Nan),
+      false,
+      "what is left cannot be re-checked as a win, so the generic step must not run",
+    );
+  });
+});
+
 describe("scoring", () => {
   // Seven pairs of winds: all-pairs, all-winds and one suit at once, which piles
   // up enough bonuses to run past the cap.

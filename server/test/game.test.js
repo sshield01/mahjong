@@ -1,6 +1,14 @@
 import { test, describe, before, after } from "node:test";
 import assert from "node:assert/strict";
-import { startServer, connect, send, record, uniqueRoom } from "./helpers.js";
+import {
+  startServer,
+  connect,
+  send,
+  record,
+  uniqueRoom,
+  seedRoom,
+  allWindTiles,
+} from "./helpers.js";
 
 let server;
 const open = [];
@@ -195,6 +203,17 @@ describe("reclaiming a seat", () => {
       view.body.Nan.up.every((t) => view.body.tiles[t] !== null),
       "the reclaimed seat's hand is handed over",
     );
+
+    // Regression: this went out with `broadcast`, which reaches everyone except
+    // the sender. The returning player joined as a spectator and was handed an
+    // away list with their own name on it -- that is what made the seat
+    // reclaimable -- so without this they kept showing themselves as 断线, with
+    // a 我回来了 button and "系统代打" over a hand they were really playing.
+    const back = await log.waitWhere(
+      (m) => m.subject === "playerConnected" && m.body.name === "Ben6",
+      "the returning player being told they are back",
+    );
+    assert.ok(back, "the player who reclaimed the seat hears about it too");
   });
 
   test("you cannot take a seat whose player is still here", async () => {
@@ -207,6 +226,63 @@ describe("reclaiming a seat", () => {
       () => send(intruder, "reclaimSeat", { name: "Ben7" }),
       /still connected/,
     );
+  });
+});
+
+describe("moving on to the next game", () => {
+  // Regression: only spectators were allowed to follow the room forward, on the
+  // grounds that a seated player crosses over by pressing 再来一局. But the host
+  // can start the next game without waiting, and that push removes everyone
+  // else's 再来一局 button -- so they never send one, and their connection stays
+  // pointed at the finished game. Their votes then landed on a game nobody was
+  // playing and the live round waited forever. The table froze on the very first
+  // discard of every game after the first.
+  test("a player carried into the next game by the host can still play it", async () => {
+    const room = uniqueRoom();
+    // An all-wind deck: the dealer's opening hand already wins, which is the
+    // shortest route to a *finished* game one.
+    seedRoom(server, room, { tiles: allWindTiles() });
+
+    const a = await client();
+    const b = await client();
+    const aLog = record(a);
+    const bLog = record(b);
+    await send(a, "location", { room });
+    await send(b, "location", { room });
+    await send(a, "takeSeat", { position: "Ton", name: "Amy" });
+    await send(b, "takeSeat", { position: "Nan", name: "Bea" });
+
+    const dealt = Promise.all([aLog.waitFor("start"), bLog.waitFor("start")]);
+    await send(a, "startGame");
+    await dealt;
+    await send(a, "declare");
+    await aLog.waitFor("win");
+
+    // Amy asks for another game and immediately starts it. Bea is pushed into
+    // game two without ever having pressed 再来一局 herself.
+    aLog.clear();
+    bLog.clear();
+    await send(a, "playAgain");
+    const second = Promise.all([aLog.waitFor("start"), bLog.waitFor("start")]);
+    await send(a, "startGame");
+    const [aView, bView] = (await second).map((m) => m.body);
+    assert.ok(aView.started, "game two is dealt");
+
+    // Play the opening discard, whoever holds it, then cast the vote the other
+    // client would send. With two seats the discarder never votes on their own
+    // tile, so this single vote is the whole round.
+    const dealerSeat = aView.turn;
+    const dealer = dealerSeat === "Ton" ? a : b;
+    const other = dealer === a ? b : a;
+    const view = dealer === a ? aView : bView;
+
+    aLog.clear();
+    bLog.clear();
+    await send(dealer, "discard", { tile: discardableTile(view, dealerSeat) });
+    await send(other, "draw");
+
+    const resolved = await bLog.waitFor("draw");
+    assert.ok(resolved, "the round resolved instead of hanging on the discard");
   });
 });
 

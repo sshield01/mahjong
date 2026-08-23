@@ -159,33 +159,46 @@ export default (io, stateDirectory) => {
 
       for (;;) {
         const message = await socket.recv();
-        // Seated players step to the next game deliberately, via 再来一局. A
-        // spectator has no such button and nothing to preserve in the old game,
-        // so let them follow the room forward -- otherwise this connection stays
-        // pinned to the finished schema and `takeSeat` would try to sit them in
-        // a game that has already been played.
-        if (n < schemas.length - 1 && !schema.seatOf(name)) {
+        // Follow the room forward. A connection left pointing at a finished game
+        // can only do harm: its votes land on a game nobody is playing, so the
+        // live round waits forever for a player whose client has, as far as they
+        // can tell, already answered. Two ways to end up there -- a spectator,
+        // who has no 再来一局 button at all, and a seated player whose button
+        // vanished because the host started the next game without waiting for
+        // everyone to press it.
+        //
+        // `playAgain` is the exception: that message *is* the step forward, and
+        // it needs to still see the finished game to know there is one to step
+        // from.
+        if (n < schemas.length - 1 && message.subject !== "playAgain") {
           n = schemas.length - 1;
           schema = schemas[n];
         }
-        if (schema.completed && message.subject === "playAgain") {
-          ++n;
-          if (schemas.length === n) {
-            schemas.push(Schema.nextGame(schema, schemas[0]));
-            // Spectators have no 再来一局 button of their own, so move them across
-            // as soon as the next game exists. Seated players cross over one at a
-            // time, as each of them asks for it.
-            broadcastSchema(schemas[n], { spectatorsOnly: true });
+        if (message.subject === "playAgain") {
+          if (schema.completed) {
+            ++n;
+            if (schemas.length === n) {
+              schemas.push(Schema.nextGame(schema, schemas[0]));
+              // Spectators have no 再来一局 button of their own, so move them
+              // across as soon as the next game exists. Seated players cross over
+              // one at a time, as each of them asks for it.
+              broadcastSchema(schemas[n], { spectatorsOnly: true });
+            }
+            schema = schemas[n];
           }
-          schema = schemas[n];
           message.success({ schema: Schema.concealed(schema, name) });
 
           // Asking for another game is also this player's vote to begin it. Once
           // everyone still seated has asked, deal immediately -- nobody has to go
           // back and press 开始. The host can still start early for a table that
           // is waiting on someone slow.
+          //
+          // `n > 0` keeps this to follow-up games only. Game one is started by
+          // the host and nobody else, and without the guard a stray 再来一局 in
+          // the opening lobby would count as a ready vote and could deal the
+          // hand out from under them.
           const seat = schema.seatOf(name);
-          if (seat && !schema.started) {
+          if (n > 0 && seat && !schema.started) {
             schema[seat].ready = true;
             socket.emit(new Message("playerReady", { name }));
             const seated = schema.seatedPlayers();

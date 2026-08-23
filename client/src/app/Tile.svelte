@@ -110,7 +110,20 @@
   }
 
   const DISCARD_SIZE = 10;
-  const DISCARD_INSET = pct(100 - STACKS_WIDTH / 8.0 * 3 - 2 * TILE_HEIGHT);
+  const DISCARD_INSET_PCT = 100 - STACKS_WIDTH / 8.0 * 3 - 2 * TILE_HEIGHT;
+  const DISCARD_INSET = pct(DISCARD_INSET_PCT);
+
+  // How much room the rows have between where the pile starts and the inner face
+  // of the wall behind it -- two tiles deep, which is what the inset above is
+  // built from. Rows grow into this band and must not leave it.
+  const DISCARD_DEPTH = WALL_INSET_PCT - DISCARD_INSET_PCT;
+
+  // Spacing between rows. One tile height while the rows fit, and tighter after
+  // that so a long hand closes the pile up instead of marching it into the wall.
+  const discardRowPitch = (rows) =>
+    rows > 1
+      ? Math.min(TILE_HEIGHT, (DISCARD_DEPTH - TILE_HEIGHT) / (rows - 1))
+      : TILE_HEIGHT;
 
   // The discard row used to be positioned from the *wall's* width minus two
   // tiles, which is unrelated to how wide the row actually is, leaving it sitting
@@ -275,10 +288,18 @@
         const horizontal = j * TILE_WIDTH;
         // Extra rows grow back toward this player's own hand, not toward the
         // table's center -- otherwise, in a long hand, four independently-growing
-        // discard piles converge and overlap in the middle of the table.
-        const vertical = k * TILE_HEIGHT;
-        position.push(`translate(${j * 3}px, ${k * 3}px)`);
-        position.push(`translate(${pct(horizontal)}, ${pct(vertical, true)})`);
+        // discard piles converge and overlap in the middle of the table. They
+        // only have DISCARD_DEPTH to grow into before the wall, so the pitch
+        // closes up once there are more rows than fit.
+        //
+        // The step used to be `pct(vertical, true)` -- max(vw, vh) -- while the
+        // tile height, the inset here and the wall inset are all min(vw, vh). On
+        // any window that is not perfectly square a row therefore stepped back
+        // further than a tile is tall, and the second row sat on the wall.
+        const rows = Math.ceil(store[wind].discarded.length / DISCARD_SIZE);
+        const vertical = k * discardRowPitch(rows);
+        position.push(`translateX(${j * 3}px)`);
+        position.push(`translate(${pct(horizontal)}, ${pct(vertical)})`);
         if (actionable) {
           // Lifted off the table and grown while it can be claimed, so the one
           // tile that matters is obvious in a pile of look-alikes -- and a much

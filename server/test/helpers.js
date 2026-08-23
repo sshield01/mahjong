@@ -19,12 +19,22 @@ export async function startServer() {
 
   return {
     url: `http://127.0.0.1:${port}`,
+    stateDirectory,
     async close() {
       io.close();
       await new Promise((resolve) => server.close(resolve));
       Fs.rmSync(stateDirectory, { recursive: true, force: true });
     },
   };
+}
+
+// Writes a room's saved state before anyone joins it, so a test can choose the
+// deck instead of taking whatever the shuffle hands out.
+export function seedRoom(server, room, basis) {
+  Fs.writeFileSync(
+    Path.join(server.stateDirectory, room),
+    JSON.stringify([{ name: room, ...basis }]),
+  );
 }
 
 export function connect(url) {

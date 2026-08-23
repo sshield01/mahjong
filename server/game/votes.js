@@ -81,7 +81,14 @@ export function handle(socket, schema, votes) {
     default:
       throw new Error(`Invalid method ${action.method}`);
   }
-  if (action.win) {
+  // Pong, Chow and Kong only build the meld; declaring the win is a separate
+  // step. `eyes()` is not like them -- it completes the game itself, scores it
+  // and emits its own "win". Running the generic step after it asked
+  // `winningHand` about a hand whose pair had just been moved into `down`,
+  // leaving 12 tiles, which is never a winning shape: the claim was answered
+  // with "You do not have a valid winning hand" even though the win had already
+  // gone through. Only the throw was keeping `updateScores` from running twice.
+  if (action.win && action.method !== "Eyes") {
     socket.emit(schema.win(schema[winner].name, kong));
   }
 }

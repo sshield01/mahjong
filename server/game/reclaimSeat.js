@@ -38,7 +38,14 @@ export default async function reclaimSeat(socket, schema, { name }) {
   sockets.set(desired, socket);
   markConnected(desired);
 
-  socket.broadcast(new Message("playerConnected", { name: desired }));
+  // `emit`, not `broadcast`: the player coming back has to hear this too. They
+  // arrived as a spectator and were handed the away list on joining, which had
+  // their own name on it -- the very reason the seat was reclaimable. Telling
+  // only the rest of the room left them looking at their own seat marked 断线,
+  // with a 我回来了 button and "系统代打" over a hand they were in fact playing
+  // normally. `leaveSeat` and `returnSeat` both emit their side of this for the
+  // same reason.
+  socket.emit(new Message("playerConnected", { name: desired }));
   // Someone is present again -- if the host is still away, they can take over.
   transferHostIfAway(socket, schema);
   // Hand them the seat's full private view -- their tiles, which as a spectator
