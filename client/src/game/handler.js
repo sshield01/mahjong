@@ -27,10 +27,19 @@ function hasActions(schema, myWind) {
   }
   const playerObj = { ...schema[myWind] };
   playerObj.up = [...hand, schema.discarded];
-  // Don't force the discard as the eye here: that only catches a win where the
-  // discard completes the pair, missing a win where it completes a run (chow).
+  // Only a win the table can actually offer counts. A win that needs the discard
+  // ponged or chowed is already covered by the two checks above, so what is left
+  // to look for is the one taken by pairing it -- and that is the eye-constrained
+  // question.
+  //
+  // Asking the unconstrained one instead reported claims that were never on
+  // offer: a hand that wins by putting the discard in a triplet alongside a
+  // wildcard, say, which nothing above can meld. On someone else's turn that
+  // only raised 想想/过 for an impossible claim, but on your own turn this is
+  // what suppresses the automatic vote -- so the table sat waiting on a player
+  // who had no button to press.
   try {
-    if (Schema.winningHand(schema, playerObj)) return true;
+    if (Schema.winningHand(schema, playerObj, schema.discarded)) return true;
   } catch (e) {}
   return false;
 }

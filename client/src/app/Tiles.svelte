@@ -265,7 +265,6 @@
           }
 
           if (index === storeValue.discarded && !myDiscard) {
-            const combos = [...new Set($selectionSets.map(set => JSON.stringify([...set.tiles].sort())))];
             if ($selectionSets.length === 1) {
               return async () => {
                 await $selectionSets[0].handler();
@@ -284,24 +283,21 @@
                     if (handle) {
                       window.clearTimeout(handle);
                     }
-                    // A win beats everything else on offer, so pick its tiles for
-                    // the player. Without this, a hand that can both 胡 and 吃 the
-                    // same discard -- the ordinary shape for 七对, whose pairs sit
-                    // on neighbouring numbers -- offers several different tile
-                    // combinations, so nothing was selected, no button appeared,
-                    // and the click looked like it did nothing at all. Only the
-                    // in-turn player is offered 吃, which is exactly why the win
-                    // stayed reachable in one click from every other seat.
-                    const winning = $selectionSets.filter(set => set.win);
-                    if (winning.length > 0) {
-                      selection.set(new Set(winning[0].tiles));
-                    } else if (combos.length === 1) {
-                      // Multiple labeled actions (e.g. Pong and Win) share the one
-                      // unambiguous set of tiles -- no need to make the player
-                      // re-click their own hand tiles just to choose between them;
-                      // select those tiles automatically and let the action buttons
-                      // (rendered once $selection matches) do the choosing.
-                      selection.set(new Set(JSON.parse(combos[0])));
+                    // Always leave one action selected, so a button appears. The
+                    // buttons only render for a selection that matches a set
+                    // exactly, so selecting nothing shows nothing -- and two
+                    // chows on the same discard use different tiles, so there
+                    // was no shared combination to fall back on. The click did
+                    // nothing visible, and on your own turn there is no clock
+                    // and no 过 either: with the other seats away, that stopped
+                    // the table dead.
+                    //
+                    // A win is the pick when one is on offer; otherwise the
+                    // first, and clicking your own tiles moves the selection to
+                    // any of the others.
+                    const preferred = $selectionSets.find(set => set.win) || $selectionSets[0];
+                    if (preferred) {
+                      selection.set(new Set(preferred.tiles));
                     }
                     selecting = !selecting;
                   }
