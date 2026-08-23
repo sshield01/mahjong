@@ -28,6 +28,7 @@
   const CONNECTING = Symbol();
   const RECONNECTING = Symbol();
   const FAILED = Symbol();
+  const BROWSING = Symbol();
 
   function getRoomFromUrl() {
     const hash = window.location.hash.slice(1);
@@ -112,7 +113,47 @@
     }
   }
 
-  connect();
+  // Arriving with no room in the URL is not a request for a random one: it is
+  // someone who wants to find a table. Show what is being played and let them
+  // pick, or start one of their own.
+  let rooms = [];
+  let browseError = null;
+  let browseTimer = null;
+
+  async function refreshRooms() {
+    try {
+      const result = await socket.send('rooms', {});
+      rooms = (result && result.rooms) || [];
+      browseError = null;
+    } catch (error) {
+      browseError = typeof error === 'string' ? error : '房间列表暂时读不到';
+    }
+  }
+
+  const REFRESH_EVERY = 5000;
+
+  async function browse() {
+    state = BROWSING;
+    await refreshRooms();
+    // People come and go while you are looking at the list.
+    if (browseTimer === null) browseTimer = window.setInterval(refreshRooms, REFRESH_EVERY);
+  }
+
+  function enterRoom(room) {
+    if (browseTimer !== null) {
+      window.clearInterval(browseTimer);
+      browseTimer = null;
+    }
+    window.location.hash = room;
+    state = CONNECTING;
+    connect();
+  }
+
+  if (getRoomFromUrl()) {
+    connect();
+  } else {
+    browse();
+  }
 
   // socket.io puts the transport back on its own after a blip -- a phone
   // locking, wifi dropping, a laptop waking up. What it cannot do is tell the
@@ -125,6 +166,12 @@
     if (state === PLAY) state = RECONNECTING;
   });
   socket.raw.on('reconnect', () => {
+    // Still choosing a table: re-handshaking here would invent a room and drop
+    // us into it. Just fetch the list again.
+    if (state === BROWSING) {
+      refreshRooms();
+      return;
+    }
     connect();
   });
 
@@ -218,6 +265,32 @@
       </div>
     </Title>
   </div>
+{:else if state === BROWSING}
+  <div class="layer full title">
+    <Title>
+      <div class="form">
+        {#if browseError}
+          <div class="error">{browseError}</div>
+        {/if}
+        {#if rooms.length === 0}
+          <div class="info">现在没有人开局</div>
+        {:else}
+          <div class="rooms">
+            {#each rooms as entry (entry.room)}
+              <button class="room" on:click={() => enterRoom(entry.room)}>
+                <span class="room-code">{entry.room}</span>
+                <span class="room-who">
+                  {entry.players.length ? entry.players.join('、') : '还没有人入座'}
+                </span>
+                <span class="room-state">{entry.playing ? '进行中' : '等待中'}</span>
+              </button>
+            {/each}
+          </div>
+        {/if}
+        <button class="button" on:click={() => enterRoom(generateRoom())}>新建房间</button>
+      </div>
+    </Title>
+  </div>
 {:else if state === FAILED}
   <div class="layer full title">
     <Title>
@@ -275,6 +348,63 @@
   padding: 16px 0;
   font-size: clamp(12pt, 3.5vw, 14pt);
   font-family: var(--font-english);
+}
+
+.rooms {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  /* Long lists scroll inside the panel rather than running off a phone. */
+  max-height: 50vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  margin: 8px 0;
+}
+
+.room {
+  display: grid;
+  /* Code and status take what they need; the names take the rest and ellipsize,
+     so one long name cannot push the status off the row. */
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: clamp(8px, 3vw, 20px);
+  width: 100%;
+  text-align: left;
+
+  color: white;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  padding: 12px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.room:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.room-code {
+  font-family: var(--font-english);
+  font-weight: 600;
+  font-size: clamp(13pt, 4vw, 17pt);
+  letter-spacing: 2px;
+}
+
+.room-who {
+  font-family: var(--font-chinese);
+  font-size: clamp(11pt, 3vw, 13pt);
+  opacity: 0.85;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.room-state {
+  font-family: var(--font-chinese);
+  font-size: clamp(10pt, 2.6vw, 12pt);
+  opacity: 0.7;
+  white-space: nowrap;
 }
 
 </style>

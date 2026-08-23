@@ -89,6 +89,54 @@ describe("joining", () => {
   });
 });
 
+describe("listing live rooms", () => {
+  // Asked by a page opened with no room in the URL, before that connection has
+  // said who it is -- which is exactly when it needs answering.
+  test("lists tables that have someone at them, and keeps listening after", async () => {
+    const quiet = uniqueRoom();
+    const busy = uniqueRoom();
+
+    // A room nobody is in: created, then abandoned.
+    const passerby = await client();
+    await send(passerby, "location", { room: quiet });
+    passerby.close();
+    await new Promise((r) => setTimeout(r, 300));
+
+    const host = await client();
+    await send(host, "location", { room: busy });
+    await send(host, "takeSeat", { position: "Ton", name: "Ida" });
+
+    const browser = await client();
+    const { rooms } = await send(browser, "rooms");
+    const listed = rooms.find((entry) => entry.room === busy);
+
+    assert.ok(listed, "a room with somebody in it is listed");
+    assert.deepEqual(listed.players, ["Ida"], "with who is sitting at it");
+    assert.equal(listed.playing, false, "and whether a hand is under way");
+    assert.ok(
+      !rooms.some((entry) => entry.room === quiet),
+      "a room nobody is in is not listed",
+    );
+
+    // Asking identified nobody, so the same connection can still join normally.
+    const joined = await send(browser, "location", { room: busy });
+    assert.ok(joined.token, "the handshake still works afterwards");
+  });
+
+  test("a room already playing says so", async () => {
+    const room = uniqueRoom();
+    await startedTable(room, ["Ivy", "Ike"]);
+
+    const browser = await client();
+    const { rooms } = await send(browser, "rooms");
+    const listed = rooms.find((entry) => entry.room === room);
+
+    assert.ok(listed);
+    assert.equal(listed.playing, true);
+    assert.deepEqual(listed.players.sort(), ["Ike", "Ivy"]);
+  });
+});
+
 describe("starting", () => {
   test("only the host may start, and only with enough players", async () => {
     const room = uniqueRoom();

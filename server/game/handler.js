@@ -55,6 +55,24 @@ export default (io, stateDirectory) => {
   const absentPlayers = (schema) =>
     schema.seatedPlayers().map((player) => player.name).filter(isAbsent);
 
+  // Tables somebody is actually at, for the front page to list. Rooms sitting on
+  // disk with nobody in them are left out: the point is to find a game to join,
+  // and every room code ever used would bury the ones being played.
+  const liveRooms = () =>
+    [...games.entries()]
+      .map(([room, schemas]) => {
+        const schema = schemas[schemas.length - 1];
+        return {
+          room,
+          people: playersInGame.get(schemas) || 0,
+          playing: !!schema.started && !schema.completed,
+          players: schema.seatedPlayers().map((player) => player.name),
+          away: absentPlayers(schema),
+        };
+      })
+      .filter((entry) => entry.people > 0)
+      .sort((a, b) => b.players.length - a.players.length || a.room.localeCompare(b.room));
+
   async function handshake(socket) {
     for (;;) {
       const message = await socket.recv();
@@ -142,6 +160,15 @@ export default (io, stateDirectory) => {
           disconnected: absentPlayers(schema),
         });
         return { name, room, schemas, token };
+      }
+
+      // Answered before the connection has said who it is, because that is
+      // exactly when it is asked: someone has opened the site with no room in
+      // the URL and is looking for a table. It identifies nobody, so the loop
+      // keeps waiting for a real handshake afterwards.
+      if (message.subject === "rooms") {
+        message.success({ rooms: liveRooms() });
+        continue;
       }
 
       message.fail("Expected reconnect or location.");
