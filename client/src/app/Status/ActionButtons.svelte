@@ -93,14 +93,30 @@
   // round waits on their vote forever.
   $: canVote = $timer && myWind && !$currentVotes[myWind];
 
-  $: canExposeWildcard = $store && $store.drawn !== undefined && $store.turn === myWind &&
+  // Melds you build on your own turn, off the tile you just drew.
+  $: canMeld = $store && $store.drawn !== undefined && $store.turn === myWind;
+
+  $: canDeclare = $store && myWind && $store.turn === myWind &&
+    Schema.winningHand($store, $store[myWind]);
+
+  $: canExposeWildcard = canMeld &&
     $store.wildcard && $store[myWind].down.length > 0 &&
     eq($store.tiles[$store.drawn], $store.wildcard) &&
     $store[myWind].up.filter((t) => eq($store.tiles[t], $store.wildcard)).length >= 2;
+
+  // Whether this palette currently holds anything. It overlays the bottom-left
+  // of the table, which is where your own hand sits -- and every tile in it is a
+  // live discard target on exactly the turns these buttons appear on. Leaving the
+  // column click-through meant a tap landing in the gap beside 杠 fell past it
+  // onto a tile and discarded it, which reads as the button doing the discarding.
+  // So the column swallows clicks while it has buttons, and goes back to being
+  // transparent to them when it is empty.
+  $: hasButtons = !!(canVote || actions.length || canDeclare ||
+    (canMeld && (canExposeWildcard || concealedKongs.length || exposedKongs.length)));
 </script>
 
 <div class="container">
-  <div class="actions">
+  <div class="actions" class:live={hasButtons}>
     {#if canVote}
       {#if !$timer.paused}
         <button class="action" on:click={wait}>
@@ -118,13 +134,13 @@
       </button>
     {/each}
 
-    {#if $store && myWind && Schema.winningHand($store, $store[myWind]) && $store.turn === myWind}
+    {#if canDeclare}
       <button class="action" on:click={win}>
         胡
       </button>
     {/if}
 
-    {#if $store && $store.drawn !== undefined && $store.turn === myWind}
+    {#if canMeld}
       {#if canExposeWildcard}
         <button class="action" on:click={exposeWild}>
           亮
@@ -165,6 +181,10 @@
     flex-direction: column;
     min-width: 80px;
     pointer-events: none;
+  }
+
+  .actions.live {
+    pointer-events: auto;
   }
 
   .action {
