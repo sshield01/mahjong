@@ -10,6 +10,9 @@ import {
   allWindTiles,
 } from "./helpers.js";
 import { markConnected } from "../game/autoplay.js";
+import { sweepRooms } from "../game/handler.js";
+import Fs from "fs";
+import Path from "path";
 
 let server;
 const open = [];
@@ -134,6 +137,92 @@ describe("listing live rooms", () => {
     assert.ok(listed);
     assert.equal(listed.playing, true);
     assert.deepEqual(listed.players.sort(), ["Ike", "Ivy"]);
+  });
+});
+
+describe("what a room leaves behind", () => {
+  const stateFile = (room) => Path.join(server.stateDirectory, room);
+  const settle = () => new Promise((r) => setTimeout(r, 400));
+
+  test("a room nobody played is not written out at all", async () => {
+    const room = uniqueRoom();
+    const passerby = await client();
+    await send(passerby, "location", { room });
+    await send(passerby, "takeSeat", { position: "Ton", name: "Opened" });
+    passerby.close();
+    await settle();
+
+    assert.equal(
+      Fs.existsSync(stateFile(room)),
+      false,
+      "opening a room code and wandering off should leave nothing on disk",
+    );
+  });
+
+  // Every 再来一局 appends another whole game. Only the first is ever read again
+  // -- its dealer fixes the prevailing wind -- along with the one being played.
+  test("only the first game and the current one are kept", async () => {
+    const room = uniqueRoom();
+    // A room five rounds deep. Each game is tagged by who sat at 东 so it is
+    // clear which two survived.
+    const round = (n) => ({
+      name: room,
+      started: true,
+      tiles: [],
+      walls: [[], [], [], []],
+      Ton: {
+        name: `round${n}`,
+        up: [], down: [], discarded: [], ready: false, exposedWildcards: [],
+      },
+    });
+    Fs.writeFileSync(
+      stateFile(room),
+      JSON.stringify([0, 1, 2, 3, 4].map(round)),
+    );
+
+    // Somebody looks in and leaves again, which is what writes the room back.
+    const visitor = await client();
+    await send(visitor, "location", { room });
+    visitor.close();
+    await settle();
+
+    const kept = JSON.parse(Fs.readFileSync(stateFile(room), "utf8"));
+    assert.equal(kept.length, 2, "five games in, two written back");
+    assert.equal(kept[0].Ton.name, "round0", "the first, for the wind rotation");
+    assert.equal(kept[1].Ton.name, "round4", "and the one being played");
+  });
+
+  test("rooms nobody has touched for a while are forgotten", async () => {
+    const fresh = uniqueRoom();
+    const stale = uniqueRoom();
+    const busy = uniqueRoom();
+    for (const room of [fresh, stale, busy]) {
+      Fs.writeFileSync(stateFile(room), JSON.stringify([{ name: room }]));
+    }
+    // Backdate one of them by two days.
+    const old = Date.now() / 1000 - 2 * 24 * 60 * 60;
+    Fs.utimesSync(stateFile(stale), old, old);
+
+    const forgotten = await sweepRooms(
+      server.stateDirectory,
+      24 * 60 * 60 * 1000,
+      (room) => room === busy, // pretend somebody is in this one
+    );
+
+    assert.deepEqual(forgotten, [stale]);
+    assert.equal(Fs.existsSync(stateFile(stale)), false, "the idle one is gone");
+    assert.equal(Fs.existsSync(stateFile(fresh)), true, "a recent one is kept");
+    assert.equal(Fs.existsSync(stateFile(busy)), true, "and a live one is never touched");
+  });
+
+  test("a ttl of zero turns sweeping off", async () => {
+    const room = uniqueRoom();
+    Fs.writeFileSync(stateFile(room), JSON.stringify([{ name: room }]));
+    const old = Date.now() / 1000 - 365 * 24 * 60 * 60;
+    Fs.utimesSync(stateFile(room), old, old);
+
+    assert.deepEqual(await sweepRooms(server.stateDirectory, 0), []);
+    assert.equal(Fs.existsSync(stateFile(room)), true);
   });
 });
 

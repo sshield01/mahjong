@@ -14,8 +14,67 @@ const games = new Map();
 const playersInGame = new WeakMap();
 const sessions = new Map();
 
+// How long a room nobody is in is kept before the server forgets it.
+export const ROOM_TTL_HOURS = Number(process.env.mahjong_room_ttl_hours || 24);
+const SWEEP_EVERY = 60 * 60 * 1000;
+
+// What of a room's history is worth writing down. Every 再来一局 appends another
+// whole game, and all of them used to be saved -- five rounds at one table came
+// to twice the bytes of one, and it kept growing all evening. Only two are ever
+// read again: the first, whose dealer fixes the prevailing-wind rotation, and
+// the one being played.
+function roomHistory(schemas) {
+  if (schemas.length <= 2) return schemas;
+  return [schemas[0], schemas[schemas.length - 1]];
+}
+
+// Rooms are written out when the last player leaves, and nothing removed them
+// again -- every room code anyone had ever opened stayed on disk for good. Age
+// is counted from the last write, which is the last time anybody was in there.
+export async function sweepRooms(
+  stateDirectory,
+  ttlMs = ROOM_TTL_HOURS * 60 * 60 * 1000,
+  isLive = () => false,
+) {
+  if (!stateDirectory || !(ttlMs > 0)) return [];
+  let entries;
+  try {
+    entries = await Fs.promises.readdir(stateDirectory);
+  } catch (error) {
+    return []; // no state directory yet
+  }
+  const cutoff = Date.now() - ttlMs;
+  const forgotten = [];
+  for (const entry of entries) {
+    if (isLive(entry)) continue; // somebody is in it right now
+    try {
+      const path = `${stateDirectory}/${entry}`;
+      const stat = await Fs.promises.stat(path);
+      if (!stat.isFile() || stat.mtimeMs >= cutoff) continue;
+      await Fs.promises.unlink(path);
+      forgotten.push(entry);
+    } catch (error) {
+      // Raced with something else, or not ours to remove.
+    }
+  }
+  if (forgotten.length) {
+    console.log(`Forgot ${forgotten.length} idle room(s): ${forgotten.join(", ")}`);
+  }
+  return forgotten;
+}
+
 export default (io, stateDirectory) => {
   const filename = (name) => `${stateDirectory}/${name}`;
+
+  // Once at startup, then quietly in the background. Unreferenced so it never
+  // holds the process open by itself.
+  const sweep = () =>
+    sweepRooms(stateDirectory, ROOM_TTL_HOURS * 60 * 60 * 1000, (room) =>
+      games.has(room),
+    );
+  sweep();
+  const sweeper = setInterval(sweep, SWEEP_EVERY);
+  if (sweeper.unref) sweeper.unref();
 
   async function loadSchema(name) {
     if (games.has(name)) {
@@ -316,11 +375,16 @@ export default (io, stateDirectory) => {
         }
         if (playersInGame.get(schemas) == 0) {
           games.delete(room);
-          if (schema.started || schemas.length >= 1) {
+          // Only rooms that were actually played are worth keeping. The old
+          // guard read `schema.started || schemas.length >= 1`, and a room
+          // always holds at least one game, so it was never anything but true:
+          // a code somebody opened by accident was written out and kept exactly
+          // like a game.
+          if (schemas.some((game) => game.started)) {
             try {
               await Fs.promises.writeFile(
                 filename(room),
-                JSON.stringify(schemas),
+                JSON.stringify(roomHistory(schemas)),
               );
             } catch (error) {
               console.error(error);
