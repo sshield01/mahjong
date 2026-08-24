@@ -21,6 +21,11 @@
   let myWind;
   $: myWind = $store && $store.seatOf($myName);
 
+  // A seat reserved during an active hand has no tiles until the next deal and
+  // must behave like a spectator for this hand.
+  let waiting;
+  $: waiting = !!(myWind && $store[myWind].waiting);
+
   let myTurn;
   $: myTurn = $store && $store.turn === myWind;
 
@@ -55,20 +60,23 @@
   let exactMatches = [];
   $: {
     const storeValue = $store;
-    if (myWind && discarded && !(storeValue.wildcard && eq(discarded, storeValue.wildcard))) {
+    if (myWind && !waiting && discarded && !(storeValue.wildcard && eq(discarded, storeValue.wildcard))) {
       exactMatches = storeValue[myWind].up.filter(tile => storeValue.tiles[tile].suit === discarded.suit && storeValue.tiles[tile].value === discarded.value);
     } else {
       exactMatches = [];
     }
   };
 
-  let canMatchSelection;
-  $: canMatchSelection = selectionSet => [...$selection].every(tile => selectionSet.tiles.includes(tile));
+  // Could this offer still be the one being built out of `selected`? Taken over
+  // an explicit set as well as the live one, since deciding what a click means
+  // has to ask about the selection the click would produce, not the current one.
+  const canMatchSelectionOf = selected => selectionSet =>
+    [...selected].every(tile => selectionSet.tiles.includes(tile));
 
   let canWin = false;
   $: {
     const storeValue = $store;
-    if (myWind && discarded) {
+    if (myWind && !waiting && discarded) {
       const player = { ...storeValue[myWind] };
       player.up = [...player.up, storeValue.discarded];
       // Must stay eye-constrained: this gates the 胡 that sends `win {Eyes}`, and
@@ -85,7 +93,7 @@
   $: {
     const storeValue = $store;
     const isWild = (t) => storeValue.wildcard && eq(t, storeValue.wildcard);
-    if (myWind && discarded && !isWild(discarded)) {
+    if (myWind && !waiting && discarded && !isWild(discarded)) {
       if (typeof discarded.value === 'number') {
         const ofSuit = storeValue[myWind].up.filter(tile => storeValue.tiles[tile].suit === discarded.suit && !isWild(storeValue.tiles[tile]));
         const required = [
@@ -110,7 +118,7 @@
     const list = [];
     const storeValue = $store;
     // Nothing is on offer to a seat that is being played for it.
-    if (myWind && !away) {
+    if (myWind && !away && !waiting) {
       // `tiles` is what has to be selected for the offer to appear; `meld` is
       // what the action actually consumes. They come apart when you hold three
       // copies: the server melds the first two matching tiles itself, so which
@@ -247,7 +255,7 @@
   $: {
     const storeValue = $store;
     if (storeValue) {
-      if (storeValue.completed || away) {
+      if (storeValue.completed || away || waiting) {
         handlers = [];
       } else {
         handlers = storeValue.tiles.map((tile, index) => {
@@ -273,13 +281,31 @@
             }
           }
 
-          if ([].concat(...$selectionSets.filter(canMatchSelection).map(set => set.tiles)).includes(index) && selecting) {
+          // Every tile any offer uses stays live while choosing, not only those
+          // belonging to the offer currently selected. Narrowing it to the
+          // current selection was harmless while a click left nothing selected,
+          // since matching nothing matched everything -- but an offer is now
+          // always pre-selected so that a button appears at once, and that
+          // immediately killed the tiles of every other offer. Two 吃 that share
+          // no tile, which is the ordinary case for a discard sitting in the
+          // middle of a run, could not be swapped between at all: the hand was
+          // stuck with whichever the list happened to put first.
+          if ([].concat(...$selectionSets.map(set => set.tiles)).includes(index) && selecting) {
             return () => {
-              const selected = get(selection);
+              const selected = new Set(get(selection));
               if (selected.has(index)) {
                 selected.delete(index);
               } else {
                 selected.add(index);
+                // A tile no offer can hold alongside what is already picked
+                // means a different pattern is being started, not an addition
+                // to this one. Reading it the other way left a selection that
+                // matched nothing and offered no button.
+                const reachable = $selectionSets.some(canMatchSelectionOf(selected));
+                if (!reachable) {
+                  selected.clear();
+                  selected.add(index);
+                }
               }
               selection.set(selected);
             };

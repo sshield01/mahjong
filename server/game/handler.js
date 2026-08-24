@@ -336,7 +336,7 @@ export default (io, stateDirectory) => {
         if (schema && schema.started && !schema.completed) {
           // A disconnecting spectator has no seat -- nothing to autoplay/ignore for.
           const position = schema.seatOf(name);
-          if (position) {
+          if (position && !schema[position].waiting) {
             // Everything in here can throw -- resolving the round can end up
             // drawing from a wall with nothing left in it, say. There is no
             // message to fail here, this runs on the way out of a closed socket,

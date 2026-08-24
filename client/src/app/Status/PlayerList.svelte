@@ -14,7 +14,9 @@
   export let order;
   export let mySeat = null;
 
-  $: canPick = !mySeat && !$store.started;
+  // Empty seats may be reserved during a hand; the server marks that player as
+  // waiting and deals them in only once the next game begins.
+  $: canPick = !mySeat;
 
   // A seated player who has asked for another game waits on whoever is still
   // reading the scoreboard, not on the host -- say which.
@@ -37,6 +39,7 @@
   // A seat still held by a player who dropped or stepped away. It is not free
   // for anyone else -- either its owner takes it back, or the host clears it.
   $: isAbsent = (position) => !!$store[position] && $absent.has($store[position].name);
+  $: isWaiting = (position) => !!$store[position] && $store[position].waiting;
   $: isHost = !!$myName && $store.host === $myName;
   $: canReclaim = (position) => !mySeat && isAbsent(position);
   $: canManage = (position) =>
@@ -139,6 +142,7 @@
         <span class="tags">
           {#if $store.host === $store[position].name}<span class="tag host">房主</span>{/if}
           {#if isAbsent(position)}<span class="tag away-tag">断线</span>{/if}
+          {#if isWaiting(position)}<span class="tag ready-tag">下一局</span>{/if}
           {#if $store[position].ready}<span class="tag ready-tag">已准备</span>{/if}
         </span>
       {:else}
@@ -161,6 +165,8 @@
     <div class="hint {$store.host === $myName ? 'above-button' : ''}">
       等待其他玩家 ({readyCount}/{seatedList.length})
     </div>
+  {:else if mySeat && isWaiting(mySeat)}
+    <div class="hint">已入座，下一局开始</div>
   {:else if mySeat && $store.host !== $myName}
     <div class="hint">等待房主开始</div>
   {/if}

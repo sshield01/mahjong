@@ -10,6 +10,7 @@
   import WildcardInfo from './WildcardInfo.svelte';
   import ScoreBoard from './ScoreBoard.svelte';
   import ReclaimSeat from './ReclaimSeat.svelte';
+  import OpenSeats from './OpenSeats.svelte';
   import LeaveButton from './LeaveButton.svelte';
   import context from '../../game/context.js';
 
@@ -36,6 +37,11 @@
       <!-- Someone watching a game their own name is still seated in: offer the
            seat back. Only renders when a seated player is actually missing. -->
       <ReclaimSeat />
+      <!-- And someone watching a table with a chair going spare: offer to take
+           it. The seat diamond that normally does this is only mounted before a
+           hand starts, so without it a spectator arriving at a short-handed game
+           had to wait out the whole hand to join. -->
+      <OpenSeats />
     {/if}
   {:else}
     <GameEnd />

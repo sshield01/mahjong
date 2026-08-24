@@ -56,8 +56,13 @@ export default async function handler(
     const schema = new Schema(get(store));
     switch (message.subject) {
       case "addPlayer": {
-        const { position, name, host } = message.body;
+        const { position, name, host, waiting } = message.body;
         schema[position] = player(name);
+        // Someone sitting down mid-hand has reserved the chair, not joined the
+        // hand. `player()` starts everyone off active, so without this the seat
+        // counts towards `activePlayers()` on every screen and the table is
+        // measured against a player who is not in it.
+        schema[position].waiting = !!waiting;
         if (host !== undefined) schema.host = host;
         store.set(schema);
         break;
@@ -118,7 +123,7 @@ export default async function handler(
         schema.nextTurn();
         store.set(schema);
         const myWind = schema.seatOf(socket.name);
-        if (myWind && position !== myWind) {
+        if (myWind && !schema[myWind].waiting && position !== myWind) {
           // Fallback vote if I never act: draw on my own turn, otherwise ignore.
           // This must stay a real vote (never a bare "ignore" for the turn player) since
           // `Draw` is the one vote the server always knows how to resolve.

@@ -111,11 +111,12 @@ export function cast(socket, schema, vote) {
   if (schema.discarded === undefined) return;
   let gameVotes = votes.get(schema) || {};
   const position = schema.playerWind(socket.name);
+  if (schema[position].waiting) return;
   if (gameVotes[position]) return; // cannot vote twice
   gameVotes[position] = vote;
 
   const remaining = WINDS.filter(
-    (wind) => schema[wind] && schema.previousTurn !== wind && !gameVotes[wind],
+    (wind) => schema[wind] && !schema[wind].waiting && schema.previousTurn !== wind && !gameVotes[wind],
   );
 
   // A win is the highest possible priority, so once one is cast, no vote still
@@ -175,7 +176,7 @@ function castAutoVoteForPlayer(socket, schema, position) {
   gameVotes[position] = vote;
 
   const allCast = WINDS.filter(
-    (wind) => schema[wind] && schema.previousTurn !== wind,
+    (wind) => schema[wind] && !schema[wind].waiting && schema.previousTurn !== wind,
   ).every((wind) => gameVotes[wind]);
 
   if (allCast) {
@@ -198,4 +199,3 @@ class DrawVote extends Vote {
     super("Draw", 1);
   }
 }
-

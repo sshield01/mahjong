@@ -40,7 +40,7 @@ export function isAbsent(name) {
 // tile of the wall, unfinishable and unrestartable. Hold the game where it
 // stands instead and let it resume when somebody comes back.
 const nobodyPresent = (schema) =>
-  schema.seatedPlayers().every((player) => isAbsent(player.name));
+  schema.activePlayers().every((player) => isAbsent(player.name));
 
 // Somebody is back at a table that stopped moving. Parking the hand is the right
 // thing to do while every seat is away, but nothing looked at the position again
@@ -77,7 +77,7 @@ export function resumeAutoPlay(socket, schema) {
   // an absent one never will by itself.
   if (schema.discarded !== undefined) {
     for (const wind of WINDS) {
-      if (schema[wind] && schema.previousTurn !== wind && isAbsent(schema[wind].name)) {
+      if (schema[wind] && !schema[wind].waiting && schema.previousTurn !== wind && isAbsent(schema[wind].name)) {
         castIgnoreForPlayer(socket, schema, wind);
       }
     }
@@ -105,7 +105,7 @@ export function autoPlayAfterDiscard(socket, schema) {
   if (nobodyPresent(schema)) return;
 
   const voters = WINDS.filter(
-    (wind) => schema[wind] && schema.previousTurn !== wind,
+    (wind) => schema[wind] && !schema[wind].waiting && schema.previousTurn !== wind,
   );
   const allDisconnected = voters.every((wind) => isAbsent(schema[wind].name));
   if (!allDisconnected) return;

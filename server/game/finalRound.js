@@ -15,7 +15,7 @@ export default function playFinalRound(socket, schema) {
   if (schema.completed || !schema.started) return false;
   if (!schema.finalRound()) return false;
 
-  const laps = schema.seatedPlayers().length;
+  const laps = schema.activePlayers().length;
   for (let i = 0; i < laps; i++) {
     // Whatever the previous player drew stays in their hand; it is simply no
     // longer the tile of the moment.

@@ -46,7 +46,7 @@ function nextTileType(tile) {
 }
 
 export function player(name) {
-  return { name, up: [], down: [], discarded: [], ready: false, exposedWildcards: [] };
+  return { name, up: [], down: [], discarded: [], ready: false, exposedWildcards: [], waiting: false };
 }
 
 function tile(suit, value) {
@@ -537,7 +537,6 @@ export default class Schema {
   }
 
   addPlayer(name, position) {
-    this.assertStarted(false);
     if (!WINDS.includes(position)) {
       throw new Error(`${position} is not a valid seat.`);
     }
@@ -548,16 +547,44 @@ export default class Schema {
       throw new Error(`${name} already has a seat.`);
     }
     this[position] = player(name);
+    // Sitting down mid-hand reserves the chair rather than joining the hand: the
+    // deal has happened and there are no tiles to give out. They are visible at
+    // the table straight away, and every turn, claim and scoring path skips a
+    // `waiting` seat, so the hand in progress plays exactly as it would have.
+    // `nextGame()` rebuilds each seat with `player(name)`, which clears the flag
+    // -- that is what deals them in for the following hand.
+    //
+    // Refusing the seat outright was the alternative, and used to be what
+    // happened; it meant a spectator had to be watching at the moment a hand
+    // ended to get a chair at all.
+    this[position].waiting = this.started && !this.completed;
     if (!this.host) {
       this.host = name;
     }
-    // `host` rides along so every client learns who owns the start button.
-    return new Message("addPlayer", { position, name, host: this.host });
+    // `host` rides along so every client learns who owns the start button, and
+    // `waiting` because a client rebuilds the seat from this message alone. Left
+    // out, every screen in the room counted a mid-hand arrival as playing: the
+    // 海底 affordance is sized off `activePlayers()`, so it marked the wrong
+    // tiles and warned a draw early for everybody, and the newcomer's own client
+    // thought the hand was theirs to act in.
+    return new Message("addPlayer", {
+      position,
+      name,
+      host: this.host,
+      waiting: this[position].waiting,
+    });
   }
 
   removePlayer(name) {
-    this.assertStarted(false);
     const position = this.playerWind(name);
+    // A hand under way cannot give up a seat that is holding tiles. A seat only
+    // reserved for the next hand is not part of it, though, so letting that one
+    // go costs the table nothing -- and without the exception a spectator who
+    // sat down and then closed the tab threw on the way out, from the middle of
+    // the disconnect path.
+    if (!this[position].waiting) {
+      this.assertStarted(false);
+    }
     delete this[position];
     if (this.host === name) {
       // Hand the start button to whoever is still here, or to the next arrival.
@@ -569,6 +596,10 @@ export default class Schema {
 
   seatedPlayers() {
     return WINDS.map((position) => this[position]).filter((player) => !!player);
+  }
+
+  activePlayers() {
+    return this.seatedPlayers().filter((player) => !player.waiting);
   }
 
   assertStarted(started) {
@@ -590,7 +621,7 @@ export default class Schema {
   // Is the wall down to its last lap? Everything left beyond the dead wall is
   // one final draw per seated player, taken without discarding.
   finalRound() {
-    return this.tilesRemaining() <= DEAD_WALL + this.seatedPlayers().length;
+    return this.tilesRemaining() <= DEAD_WALL + this.activePlayers().length;
   }
 
   // Everything still in the wall, in the order it will come off it: forward from
@@ -619,7 +650,7 @@ export default class Schema {
   lastLap() {
     const order = this.drawOrder();
     const end = Math.max(0, order.length - DEAD_WALL);
-    const start = Math.max(0, end - this.seatedPlayers().length);
+    const start = Math.max(0, end - this.activePlayers().length);
     return { tiles: order.slice(start, end), drawsAway: start };
   }
 
@@ -638,7 +669,7 @@ export default class Schema {
     if (!this.scores[winner]) this.scores[winner] = 0;
     let total = 0;
     for (const wind of WINDS) {
-      if (!this[wind] || wind === position) continue;
+      if (!this[wind] || this[wind].waiting || wind === position) continue;
       const loser = this[wind].name;
       if (!this.scores[loser]) this.scores[loser] = 0;
       this.scores[loser] -= WASH_OUT_POINTS;
@@ -1152,7 +1183,7 @@ export default class Schema {
 
     let winnerTotal = 0;
     for (const wind of WINDS) {
-      if (this[wind] && wind !== position) {
+      if (this[wind] && !this[wind].waiting && wind !== position) {
         const isLoserDealer = wind === "Ton";
         const isLoserDiscarder = isSelfDraw || wind === this.previousTurn;
         const loserKongCount = this[wind].down.filter((meld) => meld.length >= 5).length;
@@ -1222,7 +1253,7 @@ export default class Schema {
     let hasPongClaims = false;
     if (!isWild) {
       for (const wind of WINDS) {
-        if (!this[wind] || wind === position) continue;
+        if (!this[wind] || this[wind].waiting || wind === position) continue;
         const hand = this[wind].up.map((t) => this.tiles[t]);
         if (hand.filter((t) => eq(t, discard)).length >= 2) { hasPongClaims = true; break; }
         const playerObj = { ...this[wind], up: [...this[wind].up, tile] };
@@ -1238,7 +1269,7 @@ export default class Schema {
     this.previousTurn = this.turn;
     do {
       this.turn = NEXT_WIND[this.turn];
-    } while (!this[this.turn]);
+    } while (!this[this.turn] || this[this.turn].waiting);
   }
 
   votePriority() {

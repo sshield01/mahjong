@@ -622,6 +622,97 @@ describe("reclaiming a seat", () => {
 });
 
 describe("moving on to the next game", () => {
+  test("a spectator can reserve an open seat during a hand and play next game", async () => {
+    const room = uniqueRoom();
+    seedRoom(server, room, { tiles: allWindTiles() });
+
+    const a = await client();
+    const b = await client();
+    const watcher = await client();
+    const aLog = record(a);
+    const watcherLog = record(watcher);
+    await send(a, "location", { room });
+    await send(b, "location", { room });
+    await send(a, "takeSeat", { position: "Ton", name: "WaitHost" });
+    await send(b, "takeSeat", { position: "Nan", name: "WaitGuest" });
+
+    const dealt = Promise.all([aLog.waitFor("start"), record(b).waitFor("start")]);
+    await send(a, "startGame");
+    await dealt;
+
+    await send(watcher, "location", { room });
+    await send(watcher, "takeSeat", { position: "Shaa", name: "Waiting" });
+
+    await send(a, "declare");
+    await aLog.waitFor("win");
+
+    aLog.clear();
+    const nextDealt = Promise.all([aLog.waitFor("start"), watcherLog.waitFor("start")]);
+    await send(a, "playAgain");
+    await send(a, "startGame");
+    const [, waitingView] = (await nextDealt).map((message) => message.body);
+
+    assert.equal(waitingView.Shaa.name, "Waiting");
+    assert.equal(waitingView.Shaa.up.length, 13, "the reserved seat is dealt into the next hand");
+  });
+
+  // A client rebuilds an arriving seat from the addPlayer message alone, so the
+  // reservation has to travel with it. Without it every screen in the room --
+  // the newcomer's included -- counted them among the players actually in the
+  // hand, and everything sized off `activePlayers()`, the 海底 last lap most
+  // visibly, was measured against a seat holding no tiles.
+  test("a mid-hand arrival is announced as waiting", async () => {
+    const room = uniqueRoom();
+    const { a, aLog } = await startedTable(room, ["SeeHost", "SeeGuest"]);
+
+    aLog.clear();
+    const watcher = await client();
+    await send(watcher, "location", { room });
+    await send(watcher, "takeSeat", { position: "Shaa", name: "Latecomer" });
+
+    const announced = await aLog.waitWhere(
+      (m) => m.subject === "addPlayer" && m.body.name === "Latecomer",
+      "the table hearing about the new seat",
+    );
+    assert.equal(announced.body.waiting, true, "and hearing that it only holds a reservation");
+  });
+
+  // The other end of reserving a chair: giving it up again. A seat holding tiles
+  // cannot vanish mid-hand, which is why kicking is otherwise refused until the
+  // deal is over -- but a reservation holds nothing. Without the exception a
+  // spectator could sit down, close the tab, and leave a chair nobody could free
+  // for the rest of the hand.
+  test("a reserved seat can be freed mid-hand, a playing one cannot", async () => {
+    const room = uniqueRoom();
+    const { a, b } = await startedTable(room, ["KickHost", "KickGuest"]);
+
+    const watcher = await client();
+    await send(watcher, "location", { room });
+    await send(watcher, "takeSeat", { position: "Shaa", name: "Reserved" });
+
+    // They wander off, so the seat is fair game.
+    watcher.close();
+    await new Promise((r) => setTimeout(r, 300));
+
+    const kicked = await send(a, "kickPlayer", { position: "Shaa" });
+    assert.equal(kicked.name, "Reserved", "the reservation is given up");
+
+    const state = await send(a, "diagnose", {});
+    assert.ok(
+      !state.seats.some((seat) => seat.seat === "Shaa"),
+      "and the chair is empty again",
+    );
+    assert.equal(state.completed, false, "with the hand still under way");
+
+    // The seat actually playing is still untouchable while the hand runs.
+    await send(b, "leaveSeat");
+    await assert.rejects(
+      () => send(a, "kickPlayer", { position: "Nan" }),
+      /has already started/,
+      "a seat holding tiles cannot be freed mid-hand",
+    );
+  });
+
   // Regression: only spectators were allowed to follow the room forward, on the
   // grounds that a seated player crosses over by pressing 再来一局. But the host
   // can start the next game without waiting, and that push removes everyone
