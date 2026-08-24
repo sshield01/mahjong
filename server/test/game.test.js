@@ -363,6 +363,59 @@ describe("a player going away", () => {
     assert.ok(resumed > 0, "there are still tiles to play with");
   });
 
+  // Regression: when both players went away simultaneously, nobodyPresent()
+  // halted auto-play. When one came back, nothing re-triggered auto-play for
+  // the still-absent turn player, leaving the table permanently stuck.
+  test("returning from away resumes auto-play for a stalled absent turn", async () => {
+    const room = uniqueRoom();
+    const { a, b, aLog, aStart } = await startedTable(room, ["Ann14", "Ben14"]);
+
+    // Both go away — the game stalls because nobodyPresent() is true.
+    await send(a, "leaveSeat");
+    await send(b, "leaveSeat");
+    await new Promise((r) => setTimeout(r, 400));
+
+    // Ann comes back. Ben is still the turn player (or will be after auto-play
+    // cascades). The game must unstick itself.
+    aLog.clear();
+    await send(a, "returnSeat");
+
+    // Wait for the table to move: a draw or discard on Ben's behalf means
+    // auto-play resumed successfully.
+    const moved = await aLog.waitWhere(
+      (m) => m.subject === "discard" || m.subject === "draw",
+      "auto-play resuming after return",
+    );
+    assert.ok(moved, "the table resumed instead of staying stuck");
+  });
+
+  // Regression: reconnecting via reclaimSeat (new tab, cleared storage) should
+  // also unstick a stalled table, not just returnSeat.
+  test("reconnecting unsticks a table stalled by nobodyPresent", async () => {
+    const room = uniqueRoom();
+    const { a, b } = await startedTable(room, ["Ann15", "Ben15"]);
+
+    // Both disconnect (close tab).
+    a.close();
+    await new Promise((r) => setTimeout(r, 200));
+    b.close();
+    await new Promise((r) => setTimeout(r, 400));
+
+    // Ann reconnects from a fresh socket. The table was stuck because both were
+    // gone; her return should kick auto-play for Ben.
+    const fresh = await client();
+    const freshLog = record(fresh);
+    await send(fresh, "location", { room });
+    await send(fresh, "reclaimSeat", { name: "Ann15" });
+
+    const moved = await freshLog.waitWhere(
+      (m) => m.subject === "discard" || m.subject === "draw",
+      "auto-play resuming after reconnect",
+      5000,
+    );
+    assert.ok(moved, "the table resumed after reconnection");
+  });
+
   test("a deliberate 暂离 hands the start button to someone present", async () => {
     const room = uniqueRoom();
     const { a, bLog } = await startedTable(room, ["Ann2", "Ben2"]);

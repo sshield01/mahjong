@@ -2,6 +2,7 @@ import Schema, { player, eq } from "../lib/schema.js";
 import { get } from "svelte/store";
 
 const TIMER_DURATION = 6000;
+let haClaimsHandle = null;
 
 function hasActions(schema, myWind) {
   if (!myWind) return false; // a spectator has no hand to act with
@@ -103,6 +104,8 @@ export default async function handler(
       }
       case "discard": {
         window.clearTimeout((get(timer) || {}).handle);
+        window.clearTimeout(haClaimsHandle);
+        haClaimsHandle = null;
         timer.set(null);
         const { position, tile, reveal, hasClaims } = message.body;
         currentVotes.set({ [position]: { method: "Discard", priority: 0 } });
@@ -160,7 +163,7 @@ export default async function handler(
             // auto-vote so their claim isn't cut off -- deliberately a bare
             // setTimeout rather than `timer.set`, so no buttons appear on a seat
             // with no decision to make.
-            window.setTimeout(fallback, TIMER_DURATION);
+            haClaimsHandle = window.setTimeout(fallback, TIMER_DURATION);
           } else {
             // Nobody has any claim on this discard -- keep things moving.
             fallback();

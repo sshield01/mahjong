@@ -1,6 +1,6 @@
 import AsyncSocket, { Disconnect } from "../socket/socket.js";
 import Message from "../socket/message.js";
-import Schema from "../lib/schema.js";
+import Schema, { WINDS } from "../lib/schema.js";
 import Fs from "fs";
 import Crypto from "crypto";
 import sockets from "./sockets.js";
@@ -234,6 +234,29 @@ export default (io, stateDirectory) => {
     }
   }
 
+  function resumeAutoPlay(socket, schema) {
+    if (!schema.started || schema.completed) return;
+    const turnPlayer = schema[schema.turn];
+    if (turnPlayer && isAbsent(turnPlayer.name)) {
+      if (schema.drawn !== undefined) {
+        autoPlayAfterDraw(socket, schema);
+      } else if (schema.discarded === undefined) {
+        try {
+          const [message] = schema.draw(schema.turn);
+          socket.emit(message);
+          autoPlayAfterDraw(socket, schema);
+        } catch (e) {}
+      }
+    }
+    if (schema.discarded !== undefined) {
+      for (const wind of WINDS) {
+        if (schema[wind] && schema.previousTurn !== wind && isAbsent(schema[wind].name)) {
+          castIgnoreForPlayer(socket, schema, wind);
+        }
+      }
+    }
+  }
+
   return async (rawSocket) => {
     const socket = new AsyncSocket(rawSocket, io);
     let name, room, schemas, schema, token;
@@ -242,6 +265,7 @@ export default (io, stateDirectory) => {
       let n = schemas.length - 1;
       schema = schemas[n];
       emitCurrentVotes(socket, schema);
+      resumeAutoPlay(socket, schema);
 
       for (;;) {
         const message = await socket.recv();
