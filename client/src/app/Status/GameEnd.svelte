@@ -141,8 +141,19 @@
   $: hasNoWildcard = (() => {
      if (!$store.wildcard) return true;
 	 if (!allTiles.some(t => eq(t, $store.wildcard))) return true;
+	 // The same fold the server does. A win claimed by pairing the discard
+	 // records that pair as a two-tile group in `down`, which leaves `up` one
+	 // short of the 3n+2 shape `winningHand` will even look at -- so this
+	 // answered "no" for every such win however the wildcards were being used,
+	 // and 无癞子 went missing from the breakdown while the server was doubling
+	 // the score for it. The scoreboard has to reach the same verdict as the
+	 // scoring does.
+	 const pair = winner.down.find(meld => meld.length === 2);
+	 const restored = pair
+	   ? { ...winner, up: [...winner.up, ...pair], down: winner.down.filter(meld => meld !== pair) }
+	   : winner;
 	 const noWildStore = { ...$store, wildcard: null };
-	 return Schema.winningHand(noWildStore, winner);
+	 return Schema.winningHand(noWildStore, restored);
   })();
 
   $: kongCount = winner.down.filter(meld => meld.length >= 5).length;
