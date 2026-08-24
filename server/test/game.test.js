@@ -9,6 +9,7 @@ import {
   seedRoom,
   allWindTiles,
 } from "./helpers.js";
+import Schema, { eq } from "../lib/schema.js";
 import { markConnected } from "../game/autoplay.js";
 import { sweepRooms } from "../game/handler.js";
 import Fs from "fs";
@@ -414,6 +415,75 @@ describe("a player going away", () => {
       5000,
     );
     assert.ok(moved, "the table resumed after reconnection");
+  });
+
+  // The other half of resuming: it must not resume for somebody who is not
+  // playing. `resumeAutoPlay` runs from the connection handshake, which fires for
+  // arrivals that never take a seat -- a spectator, or anyone opening the room
+  // from the front page. Those leave every seat exactly as away as it was, so the
+  // hand must stay parked. Without the guard each such connection drew another
+  // tile for an absent player: the runaway `nobodyPresent` exists to stop, paced
+  // by page loads rather than by the wall.
+  test("a spectator arriving does not play on for seats that are all away", async () => {
+    const room = uniqueRoom();
+    const { a, b, aStart } = await startedTable(room, ["Ann16", "Ben16"]);
+
+    // Park the hand on an open vote round: a discard nobody has answered is what
+    // a table stalls on, and answering it is what `resumeAutoPlay` does.
+    const dealer = aStart.turn;
+    const discarder = dealer === "Ton" ? a : b;
+    await send(discarder, "discard", { tile: discardableTile(aStart, dealer) });
+
+    await send(a, "leaveSeat");
+    await send(b, "leaveSeat");
+    await new Promise((r) => setTimeout(r, 400));
+
+    const before = await send(a, "diagnose", {});
+
+    // Three arrivals, none of whom sits down.
+    for (let i = 0; i < 3; i++) {
+      const watcher = await client();
+      await send(watcher, "location", { room });
+      await new Promise((r) => setTimeout(r, 150));
+    }
+
+    const after = await send(a, "diagnose", {});
+    assert.equal(
+      after.wall,
+      before.wall,
+      "the wall is untouched -- nobody was there to play",
+    );
+    assert.equal(after.turn, before.turn, "and the turn never moved on");
+  });
+
+  // The case a live table cannot reach. Votes live in memory, so a room coming
+  // back from disk after a restart has a discard sitting on the table with no
+  // round open on it and every seat held by a name with no socket behind it. The
+  // first arrival is what re-examines that position -- and if that arrival is
+  // only watching, the hand must stay exactly where the restart left it rather
+  // than being answered on behalf of four people who are not there.
+  test("a spectator at a room reloaded from disk answers for nobody", async () => {
+    const room = uniqueRoom();
+
+    const basis = new Schema({ name: room });
+    basis.addPlayer("Ann17", "Ton");
+    basis.addPlayer("Ben17", "Nan");
+    basis.host = "Ann17";
+    basis.start();
+    const dealer = basis.turn;
+    const tile = basis[dealer].up.find(
+      (t) => basis.tiles[t] && !(basis.wildcard && eq(basis.tiles[t], basis.wildcard)),
+    );
+    basis.discard(basis[dealer].name, tile);
+    seedRoom(server, room, JSON.parse(JSON.stringify(basis)));
+
+    const watcher = await client();
+    await send(watcher, "location", { room });
+    await new Promise((r) => setTimeout(r, 300));
+
+    const state = await send(watcher, "diagnose", {});
+    assert.equal(state.discarded, tile, "the discard is still on the table");
+    assert.equal(state.turn, basis.turn, "and the turn has not moved");
   });
 
   test("a deliberate 暂离 hands the start button to someone present", async () => {

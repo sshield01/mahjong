@@ -1,6 +1,6 @@
 import AsyncSocket, { Disconnect } from "../socket/socket.js";
 import Message from "../socket/message.js";
-import Schema, { WINDS } from "../lib/schema.js";
+import Schema from "../lib/schema.js";
 import Fs from "fs";
 import Crypto from "crypto";
 import sockets from "./sockets.js";
@@ -8,7 +8,7 @@ import * as handlers from "./handlers.js";
 import broadcastSchema from "./broadcastSchema.js";
 import transferHostIfAway from "./hostTransfer.js";
 import { emitCurrentVotes, castIgnoreForPlayer } from "./votes.js";
-import { markDisconnected, markConnected, isAbsent, autoPlayAfterDraw } from "./autoplay.js";
+import { markDisconnected, markConnected, isAbsent, autoPlayAfterDraw, resumeAutoPlay } from "./autoplay.js";
 
 const games = new Map();
 const playersInGame = new WeakMap();
@@ -231,29 +231,6 @@ export default (io, stateDirectory) => {
       }
 
       message.fail("Expected reconnect or location.");
-    }
-  }
-
-  function resumeAutoPlay(socket, schema) {
-    if (!schema.started || schema.completed) return;
-    const turnPlayer = schema[schema.turn];
-    if (turnPlayer && isAbsent(turnPlayer.name)) {
-      if (schema.drawn !== undefined) {
-        autoPlayAfterDraw(socket, schema);
-      } else if (schema.discarded === undefined) {
-        try {
-          const [message] = schema.draw(schema.turn);
-          socket.emit(message);
-          autoPlayAfterDraw(socket, schema);
-        } catch (e) {}
-      }
-    }
-    if (schema.discarded !== undefined) {
-      for (const wind of WINDS) {
-        if (schema[wind] && schema.previousTurn !== wind && isAbsent(schema[wind].name)) {
-          castIgnoreForPlayer(socket, schema, wind);
-        }
-      }
     }
   }
 

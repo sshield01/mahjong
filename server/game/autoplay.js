@@ -42,6 +42,48 @@ export function isAbsent(name) {
 const nobodyPresent = (schema) =>
   schema.seatedPlayers().every((player) => isAbsent(player.name));
 
+// Somebody is back at a table that stopped moving. Parking the hand is the right
+// thing to do while every seat is away, but nothing looked at the position again
+// afterwards: the absent turn player's auto-play had been abandoned and was never
+// retried, so the table stayed frozen even once a player returned. Every "someone
+// is back" path calls this to re-examine where the hand stands and get it going.
+//
+// The guard matters as much as the kick. This also runs from the connection
+// handshake, which fires for arrivals that never take a seat -- a spectator, or
+// anyone opening the room from the front page -- and those leave every seat as
+// absent as it was. Without the check each such connection pulled another tile
+// for a player who is not there: the same runaway `nobodyPresent` exists to stop,
+// merely paced by page loads instead of by the wall.
+export function resumeAutoPlay(socket, schema) {
+  if (!schema.started || schema.completed) return;
+  if (nobodyPresent(schema)) return;
+
+  const turnPlayer = schema[schema.turn];
+  if (turnPlayer && isAbsent(turnPlayer.name)) {
+    if (schema.drawn !== undefined) {
+      autoPlayAfterDraw(socket, schema);
+    } else if (schema.discarded === undefined) {
+      try {
+        const [drawMessage] = schema.draw(schema.turn);
+        socket.emit(drawMessage);
+        autoPlayAfterDraw(socket, schema);
+      } catch (e) {
+        // Wall exhausted -- nothing left to resume.
+      }
+    }
+  }
+
+  // A discard still on the table waits on every seat that has not answered, and
+  // an absent one never will by itself.
+  if (schema.discarded !== undefined) {
+    for (const wind of WINDS) {
+      if (schema[wind] && schema.previousTurn !== wind && isAbsent(schema[wind].name)) {
+        castIgnoreForPlayer(socket, schema, wind);
+      }
+    }
+  }
+}
+
 export function autoPlayAfterDraw(socket, schema) {
   const position = schema.turn;
   const player = schema[position];

@@ -1,8 +1,7 @@
 import sockets from "./sockets.js";
 import Message from "../socket/message.js";
-import Schema, { WINDS } from "../lib/schema.js";
-import { markConnected, isAbsent, autoPlayAfterDraw } from "./autoplay.js";
-import { castIgnoreForPlayer } from "./votes.js";
+import Schema from "../lib/schema.js";
+import { markConnected, resumeAutoPlay } from "./autoplay.js";
 import transferHostIfAway from "./hostTransfer.js";
 
 // Taking back a seat you were already playing. The session token in sessionStorage
@@ -54,30 +53,8 @@ export default async function reclaimSeat(socket, schema, { name }) {
   // they were never sent. The client treats "start" as "replace your world".
   socket.send("start", Schema.concealed(schema, desired));
 
+  // They may be walking back into a hand that was parked with every seat away.
   resumeAutoPlay(socket, schema);
 
   return { name: desired, position: seat };
-}
-
-function resumeAutoPlay(socket, schema) {
-  if (!schema.started || schema.completed) return;
-  const turnPlayer = schema[schema.turn];
-  if (turnPlayer && isAbsent(turnPlayer.name)) {
-    if (schema.drawn !== undefined) {
-      autoPlayAfterDraw(socket, schema);
-    } else if (schema.discarded === undefined) {
-      try {
-        const [message] = schema.draw(schema.turn);
-        socket.emit(message);
-        autoPlayAfterDraw(socket, schema);
-      } catch (e) {}
-    }
-  }
-  if (schema.discarded !== undefined) {
-    for (const wind of WINDS) {
-      if (schema[wind] && schema.previousTurn !== wind && isAbsent(schema[wind].name)) {
-        castIgnoreForPlayer(socket, schema, wind);
-      }
-    }
-  }
 }
