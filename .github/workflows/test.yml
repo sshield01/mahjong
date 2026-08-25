@@ -26,7 +26,7 @@ jobs:
         working-directory: server
 
   client:
-    name: Client build
+    name: Client tests and build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -48,6 +48,13 @@ jobs:
           rm -rf client/src/lib client/src/socket
           cp -r server/lib client/src/lib
           cp -r server/socket client/src/socket
+      # The plain-JS half of the client. Runs after the shared modules are in
+      # place, since these import the schema through `src/lib` exactly as the app
+      # does, and before the build, so a logic failure is not buried under
+      # whatever the compiler says next.
+      - name: Run tests
+        run: npm test
+        working-directory: client
       # Compiles every Svelte component, so a broken template or a reference to a
       # removed export fails here rather than in someone's browser.
       - name: Build

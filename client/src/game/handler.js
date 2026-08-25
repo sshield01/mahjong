@@ -7,7 +7,11 @@ let haClaimsHandle = null;
 // cast the moment another seat acts instead of idling out its full delay.
 let haClaimsFallback = null;
 
-function hasActions(schema, myWind) {
+// Does this seat hold a claim on the tile currently on the table? Exported for
+// the tests: this is what arms the claim clock, and getting it wrong is silent --
+// a seat with no clock casts its automatic vote and the claim is gone before
+// anyone sees a button.
+export function hasActions(schema, myWind) {
   if (!myWind) return false; // a spectator has no hand to act with
   if (!schema.discarded && schema.discarded !== 0) return false;
   if (schema.previousTurn === myWind) return false;

@@ -12,7 +12,11 @@ const TURN_ORDER = ["Ton", "Nan", "Shaa", "Pei"];
 // The dealer is the first *occupied* seat in turn order. It used to be safe to
 // assume that was always Ton, because seats were filled sequentially from Ton;
 // now that players pick their own seat, Ton may be empty.
-function dealerSeat(schema) {
+// Exported because the scoreboard has to reach the same answer: it recomputes
+// the hand's breakdown for display, and when it decided the dealer by the Ton
+// chair instead it showed an undoubled base beside a running total that had been
+// doubled -- for every table where nobody happened to sit at 东.
+export function dealerSeat(schema) {
   return TURN_ORDER.find((position) => schema[position]);
 }
 

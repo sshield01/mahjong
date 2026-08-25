@@ -1,6 +1,6 @@
 <script>
   import context from '../../game/context';
-  import Schema, { eq } from '../../lib/schema';
+  import Schema, { eq, dealerSeat } from '../../lib/schema';
 
   const { store, socket, myName } = context();
 
@@ -9,7 +9,11 @@
     .filter(tile => typeof tile === 'number')
     .map(tile => $store.tiles[tile]);
 
-  $: isDealer = $store.turn === 'Ton';
+  // 庄家 is the first occupied seat in turn order, not whoever holds 东 -- players
+  // pick their own chairs, so 东 is often empty. Asking the shared helper keeps
+  // this panel and the scoring that produced the totals below it in agreement.
+  $: dealer = dealerSeat($store);
+  $: isDealer = $store.turn === dealer;
   $: isSelfDraw = $store.source === 'front' || $store.source === 'back';
   // Taken on a tile from the wall's last lap.
   $: isFinalDraw = !!$store.finalDraw;
@@ -214,7 +218,7 @@
     let winnerTotal = 0;
     for (const wind of WINDS) {
       if ($store[wind] && wind !== $store.turn) {
-        const isLoserDealer = wind === 'Ton';
+        const isLoserDealer = wind === dealer;
         const isLoserDiscarder = isSelfDraw || wind === $store.previousTurn;
         const loserKongCount = $store[wind].down.filter(meld => meld.length >= 5).length;
 		const rawScore = calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount);

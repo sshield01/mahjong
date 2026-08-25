@@ -522,18 +522,20 @@
     transition: transform 0.2s ease-out;
   }
 
-  /* The next tile to draw, lifted clear of the wall and rocking gently. The lift
-     goes on the wrapper, whose transform sits outside the tile's own placement, so
-     it is always straight up off the table whichever wall the tile belongs to.
-     Breaking the wall's silhouette reads from any angle, which a colour on a
-     near-edge-on face does not.
+  /* The next tile to draw, held clear of the wall. The lift goes on the wrapper,
+     whose transform sits outside the tile's own placement, so it is always
+     straight up off the table whichever wall the tile belongs to. Breaking the
+     wall's silhouette reads from any angle, which a colour on a near-edge-on face
+     does not.
 
-     It rises above a two-high wall stack (2 x TILE_DEPTH, 4.6 of these units)
-     rather than hovering within it. The first lift cleared the wall only at the
-     top of its bob, so for most of the cycle the tile was still a sliver among
-     its neighbours and an awkward thing to hit. Height is also size here -- the
-     table is drawn in perspective, so raising it moves it toward the camera and
-     the target grows with the clearance. */
+     It sits above a two-high wall stack (2 x TILE_DEPTH, 4.6 of these units)
+     rather than within it. Height is also size here -- the table is drawn in
+     perspective, so raising it moves it toward the camera and the target grows
+     with the clearance; the tile's own `scale(1.4)` does the rest.
+
+     It used to rock between two heights. A tile that simply stays up is easier to
+     hit -- the bob meant full clearance for only an instant of each cycle, and a
+     target that kept changing size under the cursor. */
   .selection.drawable {
     transform: translateZ(min(5.5vw, 5.5vh));
   }
