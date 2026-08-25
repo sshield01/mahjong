@@ -707,4 +707,36 @@ describe("scoring", () => {
       "holding the wildcard but not relying on it keeps the 无癞子 doubling",
     );
   });
+
+  // 杠上开花: won on the replacement tile a kong drew. Only a kong replaces from
+  // the back of the wall, so "back" is the flower and "front" is an ordinary
+  // self-draw -- the two differ in nothing else, which is what makes them worth
+  // comparing directly.
+  test("winning on a kong's replacement tile is worth ten over an ordinary self-draw", () => {
+    const bloom = sevenPairsWin();
+    bloom.source = "back";
+    const withBloom = bloom.computeRoundScore("Ton").calcLoserScore(false, false, 0);
+
+    const plain = sevenPairsWin();
+    plain.source = "front";
+    const withoutBloom = plain.computeRoundScore("Ton").calcLoserScore(false, false, 0);
+
+    assert.ok(withBloom > withoutBloom, "the flower on the kong is worth more");
+
+    // The ten lands before the doublings, so the flat difference depends on the
+    // hand. Rather than restate the multipliers here -- which would be this
+    // scoring function written out a second time, and that has bitten already --
+    // measure it against 海底捞, the other bonus of ten added at the same point.
+    // The two must come out identical.
+    const lastLap = sevenPairsWin();
+    lastLap.source = "front";
+    lastLap.finalDraw = true;
+    const withFinalDraw = lastLap.computeRoundScore("Ton").calcLoserScore(false, false, 0);
+
+    assert.equal(
+      withBloom,
+      withFinalDraw,
+      "杠上开花 is worth exactly what 海底捞 is worth, both being ten before the multipliers",
+    );
+  });
 });

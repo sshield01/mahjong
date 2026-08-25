@@ -13,6 +13,9 @@
   $: isSelfDraw = $store.source === 'front' || $store.source === 'back';
   // Taken on a tile from the wall's last lap.
   $: isFinalDraw = !!$store.finalDraw;
+  // 杠上开花 -- won on the replacement tile a kong drew. Only a kong replaces
+  // from the back of the wall, so that source is the flower itself.
+  $: isKongBloom = $store.source === 'back';
   // 黄庄: the wall ran down with nobody out, so there is no hand to lay out --
   // the dealer just collects a flat two from each of the others.
   $: washedOut = !!$store.washedOut;
@@ -186,6 +189,7 @@
       if (isAllWinds) score += 10;
       if (isAllSameKind) score += 10;
       if (isFinalDraw) score += 10;
+      if (isKongBloom) score += 10;
       if (hasNoWildcard) score *= 2;
       for (let i = 0; i < kongCount + loserKongCount; i++) score *= 2;
       for (let i = 0; i < pairsFourOfAKind; i++) score *= 2;
@@ -202,6 +206,7 @@
     if (isAllWinds) lines.push({ label: '全风', value: '+10' });
     if (isAllSameKind) lines.push({ label: '清一色', value: '+10' });
     if (isFinalDraw) lines.push({ label: '海底捞', value: '+10' });
+    if (isKongBloom) lines.push({ label: '杠上开花', value: '+10' });
     for (let i = 0; i < kongCount; i++) lines.push({ label: '杠', value: 'x2' });
     for (let i = 0; i < pairsFourOfAKind; i++) lines.push({ label: '豪华', value: 'x2' });
 

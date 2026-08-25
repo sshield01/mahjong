@@ -138,6 +138,13 @@
         pongs.push({ tiles: exactMatches, meld: exactMatches });
       } else if (exactMatches.length === 3) {
         pongs.push({ tiles: exactMatches, meld: exactMatches.slice(0, 2) });
+      }
+
+      // 碰 stays on offer to the end; 杠 does not. Its replacement comes from the
+      // back of the wall, and on the last lap that is all the wall there is --
+      // the 海底 round is counted out of what stands in front of it. The server
+      // refuses a kong from here, so the offer would only lead to a rejection.
+      if (exactMatches.length === 3 && !storeValue.finalRound()) {
         list.push({
           tiles: exactMatches,
           label: '杠',

@@ -24,7 +24,14 @@
   // being falsy anyway (e.g. a spectator) rather than throwing on $store[myWind].
   $: myWind = $store && $store.seatOf($myName);
   $: isWild = (t) => $store.wildcard && eq(t, $store.wildcard);
-  $: concealedKongs = myWind ? $store[myWind].up
+
+  // No kong once the hand is down to its last lap -- the replacement would come
+  // from the back of the wall, which is the only part still standing, and the
+  // 海底 round is counted out of what is left in front of it. The server refuses
+  // it, so offering the button would only produce a rejection nobody asked for.
+  $: kongsAllowed = !!$store && $store.started && !$store.completed && !$store.finalRound();
+
+  $: concealedKongs = (myWind && kongsAllowed) ? $store[myWind].up
     .filter((tile, i, tiles) =>
       !isWild($store.tiles[tile]) &&
       tiles
@@ -33,7 +40,7 @@
         .filter(info => eq(info, $store.tiles[tile]))
         .length === 3
     ) : [];
-  $: exposedKongs = myWind ? $store[myWind].up
+  $: exposedKongs = (myWind && kongsAllowed) ? $store[myWind].up
     .filter(tile =>
       !isWild($store.tiles[tile]) &&
       $store[myWind].down

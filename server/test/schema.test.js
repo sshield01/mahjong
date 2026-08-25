@@ -209,6 +209,27 @@ describe("claiming a run", () => {
     assert.equal(schema.turn, "Shaa", "and the turn follows the claim");
   });
 
+  test("no kong once the hand is down to its last lap", () => {
+    const schema = new Schema({ name: "r", tiles: allWindTiles() });
+    seat(schema, "Ton", "Alice");
+    seat(schema, "Nan", "Bob");
+    schema.start();
+
+    assert.equal(schema.finalRound(), false, "a full wall is not the last lap");
+    assert.doesNotThrow(() => schema.assertKongAllowed(), "and kongs are fine there");
+
+    // Run the wall down past the threshold: the dead wall plus one tile a seat.
+    schema.walls = [[[0, 1], [2, 3]], [], [], []];
+    assert.equal(schema.finalRound(), true);
+
+    // Every kong replaces from the back of the wall, so every kind is refused --
+    // and refused before its own checks, so the reason given is the real one
+    // rather than whichever precondition happened to fail next.
+    assert.throws(() => schema.concealedKong("Alice", 0), /last lap/);
+    assert.throws(() => schema.augmentedKong("Alice", 0), /last lap/);
+    assert.throws(() => schema.exposedKong("Nan"), /last lap/);
+  });
+
   test("but nobody may pick up their own discard", () => {
     const schema = new Schema({ name: "r", tiles: allWindTiles() });
     seat(schema, "Ton", "Alice");

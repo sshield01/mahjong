@@ -624,6 +624,17 @@ export default class Schema {
     return this.tilesRemaining() <= DEAD_WALL + this.activePlayers().length;
   }
 
+  // A kong replaces from the back of the wall, and once the hand is down to its
+  // last lap that is the only part left standing -- the 海底 round is counted out
+  // of what remains in front of it, so spending a tile from behind moves the end
+  // of the hand while it is being reached. No kong from here on: the last lap is
+  // dealt as it stands.
+  assertKongAllowed() {
+    if (this.finalRound()) {
+      throw new Error("No kong on the last lap.");
+    }
+  }
+
   // Everything still in the wall, in the order it will come off it: forward from
   // the break, and top tile first within each stack. Kongs eat the far end, so
   // the tail of this is the dead wall.
@@ -757,6 +768,7 @@ export default class Schema {
   }
 
   exposedKong(position) {
+    this.assertKongAllowed();
     if (position === this.previousTurn) {
       throw new Error("You may not pick up your own discard.");
     }
@@ -796,6 +808,7 @@ export default class Schema {
   }
 
   concealedKong(player, tile) {
+    this.assertKongAllowed();
     const position = this.playerWind(player);
     if (position !== this.turn) {
       throw new Error("It is not your turn.");
@@ -827,6 +840,7 @@ export default class Schema {
   }
 
   augmentedKong(player, tile) {
+    this.assertKongAllowed();
     const position = this.playerWind(player);
     if (position !== this.turn) {
       throw new Error("It is not your turn.");
@@ -960,6 +974,11 @@ export default class Schema {
     const isDealer = position === "Ton";
     const isSelfDraw = this.source === "front" || this.source === "back";
     const isFinalDraw = !!this.finalDraw;
+    // 杠上开花: won on the replacement tile drawn after making a kong. Every kong
+    // -- concealed, augmented or claimed from a discard -- replaces from the back
+    // of the wall and marks the draw "back", and nothing else does, so that is
+    // exactly the flower on the kong.
+    const isKongBloom = this.source === "back";
 
     const isPongpong = (() => {
       const isW = (t) => this.wildcard && eq(t, this.wildcard);
@@ -1167,6 +1186,8 @@ export default class Schema {
       if (isAllSameKind) score += 10;
       // 海底捞 -- taken on a tile from the wall's last lap.
       if (isFinalDraw) score += 10;
+      // 杠上开花 -- taken on the replacement tile a kong drew.
+      if (isKongBloom) score += 10;
       if (hasNoWildcard) score *= 2;
       for (let i = 0; i < kongCount + loserKongCount; i++) score *= 2;
       for (let i = 0; i < pairsFourOfAKind; i++) score *= 2;
