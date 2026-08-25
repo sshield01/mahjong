@@ -19,26 +19,50 @@ function hasActions(schema, myWind) {
   const handTiles = hand.map(t => schema.tiles[t]).filter(Boolean);
   const matching = handTiles.filter(t => eq(t, discard));
   if (matching.length >= 2) return true;
-  if (schema.turn === myWind && typeof discard.value === 'number') {
-    const ofSuit = handTiles.filter(t => t.suit === discard.suit && !isWild(t));
-    const vals = ofSuit.map(t => t.value);
-    if (vals.includes(discard.value - 2) && vals.includes(discard.value - 1)) return true;
-    if (vals.includes(discard.value - 1) && vals.includes(discard.value + 1)) return true;
-    if (vals.includes(discard.value + 1) && vals.includes(discard.value + 2)) return true;
+  // The runs this discard could complete. Worked out for every seat, not just
+  // the one in turn: taking the tile as a 吃 is the turn player's privilege, but
+  // *winning* on it is not, and the server agrees -- `chow` refuses only your own
+  // discard, and a Win vote outranks everything else in the round.
+  const runPartners = (() => {
+    if (typeof discard.value !== 'number') return [];
+    const ofSuit = hand.filter(t => {
+      const info = schema.tiles[t];
+      return info && info.suit === discard.suit && !isWild(info);
+    });
+    const at = (value) => ofSuit.find(t => schema.tiles[t].value === value);
+    const [below2, below1, above1, above2] = [
+      at(discard.value - 2), at(discard.value - 1),
+      at(discard.value + 1), at(discard.value + 2),
+    ];
+    return [[below2, below1], [below1, above1], [above1, above2]]
+      .filter(pair => pair.every(t => typeof t === 'number'));
+  })();
+
+  if (schema.turn === myWind && runPartners.length > 0) return true;
+
+  // A hand that goes out on the run itself. This used to hang off the turn check
+  // above, on the reasoning that a chow win was covered by it -- but off-turn
+  // that check never runs, so a win completed by a run was seen by nobody. The
+  // table offered the 胡 (Tiles.svelte builds those offers for any seat) while
+  // the clock never armed: no 想想, no 过, the discard not claimable from the big
+  // tile, and this client voting the win away.
+  for (const tiles of runPartners) {
+    const withRun = { ...schema[myWind] };
+    withRun.up = hand.filter(t => !tiles.includes(t));
+    withRun.down = [...schema[myWind].down, [...tiles, schema.discarded]];
+    try {
+      if (Schema.winningHand(schema, withRun)) return true;
+    } catch (e) {}
   }
+
   const playerObj = { ...schema[myWind] };
   playerObj.up = [...hand, schema.discarded];
-  // Only a win the table can actually offer counts. A win that needs the discard
-  // ponged or chowed is already covered by the two checks above, so what is left
-  // to look for is the one taken by pairing it -- and that is the eye-constrained
-  // question.
-  //
-  // Asking the unconstrained one instead reported claims that were never on
-  // offer: a hand that wins by putting the discard in a triplet alongside a
-  // wildcard, say, which nothing above can meld. On someone else's turn that
-  // only raised 想想/过 for an impossible claim, but on your own turn this is
-  // what suppresses the automatic vote -- so the table sat waiting on a player
-  // who had no button to press.
+  // The last shape left: the discard taken as the eye pair. Deliberately the
+  // eye-constrained question -- asking the unconstrained one reported claims that
+  // were never on offer, such as a hand winning by putting the discard in a
+  // triplet beside a wildcard, which nothing can meld. Off-turn that merely
+  // raised 想想/过 for an impossible claim; on your own turn it suppressed the
+  // automatic vote, and the table sat waiting on a player with no button to press.
   try {
     if (Schema.winningHand(schema, playerObj, schema.discarded)) return true;
   } catch (e) {}
