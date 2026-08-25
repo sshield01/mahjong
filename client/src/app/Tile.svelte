@@ -248,6 +248,13 @@
         position.push(`translateZ(${pct(depth)})`);
         position.push(`translateX(${pct(horizontal)})`);
         position.push('rotateY(180deg)');
+        if (drawable) {
+          // Grown about the tile's own centre, not the board's -- scaling the
+          // full-board `.selection` wrapper instead pushed an off-centre tile
+          // outward. The straight-up lift stays on the wrapper (translation does
+          // not drift); only the size belongs here.
+          position.push('scale(1.4)');
+        }
         return `transform: ${position.join(' ')}`;
       }
     }
@@ -341,7 +348,7 @@
     $store.walls.some((wall) => wall.some((stack) => stack.includes(index)));
 
   let position;
-  $: position = (tableAngle, actionable, calcPosition($store));
+  $: position = (tableAngle, actionable, drawable, calcPosition($store));
 </script>
 
 <div class="selection {selected ? 'selected' : ''} {drawable ? 'drawable' : ''}">
@@ -528,12 +535,7 @@
      table is drawn in perspective, so raising it moves it toward the camera and
      the target grows with the clearance. */
   .selection.drawable {
-    animation: offer 1.8s ease-in-out infinite;
-  }
-
-  @keyframes offer {
-    0%, 100% { transform: translateZ(min(4vw, 4vh)); }
-    50%      { transform: translateZ(min(7vw, 7vh)); }
+    transform: translateZ(min(5.5vw, 5.5vh));
   }
 
   /* Colour every face, not just the back. The generic clickable palette leaves the
@@ -546,10 +548,4 @@
     --color-front-front: #63b3ea;
   }
 
-  @media (prefers-reduced-motion: reduce) {
-    .selection.drawable {
-      animation: none;
-      transform: translateZ(min(5.5vw, 5.5vh));
-    }
-  }
 </style>

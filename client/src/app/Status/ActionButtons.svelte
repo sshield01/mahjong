@@ -11,6 +11,7 @@
     store,
     timer,
     myName,
+    confirm,
   } = context();
 
   let actions = []
@@ -69,7 +70,22 @@
     }
   }
 
+  // Two or more wildcards in hand makes a regular 胡 unlikely; warn before a
+  // player melds one away (杠) or declares on that shape. Only while the hand is
+  // still concealed -- once a meld is down the choice is made and the prompt
+  // would just nag on every later action. (Mirrors the same guard in Tiles.svelte.)
+  function confirmWildcards() {
+    if (!myWind || !$store || !$store.wildcard) return true;
+    if ($store[myWind].down.length > 0) return true;
+    const wildcards = $store[myWind].up.filter(
+      (t) => eq($store.tiles[t], $store.wildcard),
+    ).length;
+    if (wildcards < 2) return true;
+    return confirm('确定吗？手中有两张或以上百搭，可能无法胡正常牌型。');
+  }
+
   async function kong(mode, tile) {
+    if (!(await confirmWildcards())) return;
     try {
       await socket.send('kong', { mode, tile });
     } catch (error) {
@@ -78,6 +94,7 @@
   }
 
   async function win() {
+    if (!(await confirmWildcards())) return;
     try {
       await socket.send('declare');
     } catch (error) {

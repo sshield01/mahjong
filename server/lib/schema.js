@@ -971,7 +971,12 @@ export default class Schema {
       .filter((t) => typeof t === "number")
       .map((t) => this.tiles[t]);
 
-    const isDealer = position === "Ton";
+    // The dealer (庄家) doubles the base point, but the dealer is the first
+    // *occupied* seat in turn order, not necessarily Ton -- seats are chosen
+    // freely now, so Ton may be empty. Comparing against a hardcoded "Ton" lost
+    // the dealer double for every table where the dealer sat elsewhere.
+    const dealer = dealerSeat(this);
+    const isDealer = position === dealer;
     const isSelfDraw = this.source === "front" || this.source === "back";
     const isFinalDraw = !!this.finalDraw;
     // 杠上开花: won on the replacement tile drawn after making a kong. Every kong
@@ -1205,7 +1210,7 @@ export default class Schema {
     let winnerTotal = 0;
     for (const wind of WINDS) {
       if (this[wind] && !this[wind].waiting && wind !== position) {
-        const isLoserDealer = wind === "Ton";
+        const isLoserDealer = wind === dealerSeat(this);
         const isLoserDiscarder = isSelfDraw || wind === this.previousTurn;
         const loserKongCount = this[wind].down.filter((meld) => meld.length >= 5).length;
         const payment = Math.min(30, calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount));

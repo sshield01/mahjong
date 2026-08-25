@@ -6,7 +6,7 @@
 
   export let tableAngle;
 
-  const { selection, selectionSets, socket, store, timer, hasAction, discardAction, myName, absent } = context();
+  const { selection, selectionSets, socket, store, timer, hasAction, discardAction, myName, absent, confirm } = context();
 
   // Stepped away: the server is playing this seat, so the table should not be
   // offering its tiles. Without this an away player's own screen still lit up
@@ -31,6 +31,22 @@
 
   let myDiscard;
   $: myDiscard = $store && $store.previousTurn === myWind;
+
+  // Two or more wildcards in hand makes a regular 胡 unlikely, and a player who
+  // melds one away (吃/碰/杠) or declares on this shape may be giving up a bigger
+  // hand without realising it. Warn once, before the first such action -- but
+  // only while the hand is still concealed: once a meld is down the choice is
+  // already made and the prompt would just nag on every later claim.
+  function confirmWildcards() {
+    const storeValue = $store;
+    if (!myWind || !storeValue || !storeValue.wildcard) return true;
+    if (storeValue[myWind].down.length > 0) return true;
+    const wildcards = storeValue[myWind].up.filter(
+      (t) => eq(storeValue.tiles[t], storeValue.wildcard),
+    ).length;
+    if (wildcards < 2) return true;
+    return confirm('确定吗？手中有两张或以上百搭，可能无法胡正常牌型。');
+  }
 
   let toDraw = -1;
   $: {
@@ -149,6 +165,7 @@
           tiles: exactMatches,
           label: '杠',
           async handler() {
+            if (!(await confirmWildcards())) return;
             try {
               await socket.send('kong', { mode: 'exposed' });
               selection.set(new Set);
@@ -165,6 +182,7 @@
           tiles,
           label: '碰',
           async handler() {
+            if (!(await confirmWildcards())) return;
             try {
               await socket.send('pong');
               selection.set(new Set);
@@ -187,6 +205,7 @@
             label: '胡',
             win: true,
             async handler() {
+              if (!(await confirmWildcards())) return;
               try {
                 await socket.send('win', { method: 'Pong' });
                 selection.set(new Set);
@@ -204,6 +223,7 @@
           tiles,
           label: '吃',
           async handler() {
+            if (!(await confirmWildcards())) return;
             try {
               await socket.send('chow', { tiles });
               selection.set(new Set);
@@ -223,6 +243,7 @@
           label: '胡',
           win: true,
           async handler() {
+            if (!(await confirmWildcards())) return;
             try {
               await socket.send('win', { method: 'Eyes' });
               selection.set(new Set);
@@ -245,6 +266,7 @@
         label: '胡',
         win: true,
         async handler() {
+          if (!(await confirmWildcards())) return;
           try {
             await socket.send('win', { method: 'Chow', tiles });
             selection.set(new Set);

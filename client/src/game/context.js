@@ -4,8 +4,27 @@ import { writable, get } from "svelte/store";
 const CONTEXT = Symbol();
 
 export function init(socket) {
+  // A styled in-app confirmation, so a "are you sure?" reads in the game's own
+  // Chinese UI rather than the browser's native `confirm()` dialog. `pendingConfirm`
+  // holds the live request for the modal to render; `confirm(message)` returns a
+  // promise that resolves true/false once the player answers.
+  const pendingConfirm = writable(null);
+  function confirm(message) {
+    return new Promise((resolve) => {
+      pendingConfirm.set({
+        message,
+        answer(ok) {
+          pendingConfirm.set(null);
+          resolve(ok);
+        },
+      });
+    });
+  }
+
   setContext(CONTEXT, {
     socket,
+    pendingConfirm,
+    confirm,
     // The name the server knows us by. Mirrors `socket.name`, but as a store, so
     // components re-resolve their seat the moment it changes -- `socket.name` is
     // a plain property and the `addPlayer` broadcast can arrive before it updates.

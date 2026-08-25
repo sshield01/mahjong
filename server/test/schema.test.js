@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import Schema from "../lib/schema.js";
+import Schema, { player } from "../lib/schema.js";
 import { allWindTiles } from "./helpers.js";
 
 function seat(schema, position, name) {
@@ -150,6 +150,79 @@ describe("next game", () => {
 
     const next = Schema.nextGame(first, first);
     assert.equal(next.Ton.name, "Alice", "seats do not rotate when the dealer wins");
+  });
+});
+
+describe("dealer scoring by seat", () => {
+  // Regression: the dealer (庄家) doubles the base point, but scoring identified
+  // the dealer by the hardcoded "Ton" seat while the rest of the code treats the
+  // dealer as the first *occupied* seat. Players pick their own seats now, so Ton
+  // is often empty -- and whenever the dealer sat elsewhere the double vanished.
+
+  // A win of four chows and a pair, across all three suits and including
+  // terminals: no hand bonus applies (not pongpong, not one-suit, not all-jiang,
+  // not seven-pairs), so the base point and its dealer doubling are all that move.
+  function deckWithPlainWin() {
+    const tiles = [
+      { suit: "Pin", value: 1 }, { suit: "Pin", value: 2 }, { suit: "Pin", value: 3 },
+      { suit: "Pin", value: 4 }, { suit: "Pin", value: 5 }, { suit: "Pin", value: 6 },
+      { suit: "Sou", value: 7 }, { suit: "Sou", value: 8 }, { suit: "Sou", value: 9 },
+      { suit: "Man", value: 1 }, { suit: "Man", value: 2 }, { suit: "Man", value: 3 },
+      { suit: "Man", value: 9 }, { suit: "Man", value: 9 },
+    ];
+    while (tiles.length < 136) tiles.push({ suit: "wind", value: "Pei" });
+    return tiles;
+  }
+  const WIN_HAND = Array.from({ length: 14 }, (_, i) => i);
+  // A wildcard absent from that hand, so 无癞子 doubles every payment identically
+  // and drops out of any comparison.
+  const WILDCARD = { suit: "dragon", value: "Haku" };
+
+  test("the dealer-winner's double follows the dealer's seat, not the Ton chair", () => {
+    // Dealer sitting in Ton -- the case the old hardcoded check happened to get right.
+    const inTon = new Schema({ tiles: deckWithPlainWin(), wildcard: WILDCARD });
+    inTon.Ton = { ...player("Alice"), up: [...WIN_HAND] };
+    inTon.Nan = { ...player("Bob") };
+    inTon.Shaa = { ...player("Cara") };
+    inTon.source = "discard";
+    inTon.turn = "Ton";
+    inTon.previousTurn = "Nan"; // Bob fed the winning tile
+    inTon.updateScores("Ton");
+
+    // Same players and hands, shifted one seat on so the dealer sits in Nan with
+    // Ton empty. The scores must come out identical -- the double is the dealer's,
+    // not the chair's.
+    const offTon = new Schema({ tiles: deckWithPlainWin(), wildcard: WILDCARD });
+    offTon.Nan = { ...player("Alice"), up: [...WIN_HAND] };
+    offTon.Shaa = { ...player("Bob") };
+    offTon.Pei = { ...player("Cara") };
+    offTon.source = "discard";
+    offTon.turn = "Nan";
+    offTon.previousTurn = "Shaa"; // Bob fed the winning tile
+    offTon.updateScores("Nan");
+
+    assert.deepEqual(offTon.scores, inTon.scores, "dealer double must not depend on the Ton seat");
+    assert.ok(inTon.scores.Alice > 0, "the dealer collects");
+    assert.ok(inTon.scores.Bob < inTon.scores.Cara, "the discarder pays more than the idle seat");
+  });
+
+  test("a dealer who loses pays the doubled base wherever they sit", () => {
+    // Ton empty, so Nan is the dealer -- and here a losing seat. A self-draw makes
+    // every other seat pay as the "discarder", so the only thing separating the
+    // dealer-loser from the plain loser is the dealer double itself.
+    const schema = new Schema({ tiles: deckWithPlainWin(), wildcard: WILDCARD });
+    schema.Nan = { ...player("Alice") };                     // dealer, loser
+    schema.Shaa = { ...player("Cara"), up: [...WIN_HAND] };  // winner (self-draw)
+    schema.Pei = { ...player("Dora") };                      // non-dealer, loser
+    schema.source = "front";
+    schema.turn = "Shaa";
+    schema.previousTurn = "Shaa";
+    schema.updateScores("Shaa");
+
+    assert.ok(
+      schema.scores.Alice < schema.scores.Dora,
+      "the dealer pays more than a non-dealer, even seated off Ton",
+    );
   });
 });
 

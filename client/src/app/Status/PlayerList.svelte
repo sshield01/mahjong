@@ -157,18 +157,20 @@
 {/if}
 
 {#if !pending}
-  <!-- The host's start button sits at the same bottom anchor, so lift the hint
-       clear of it rather than letting the two overlap. -->
+  <!-- A seated player's own name card sits at the bottom centre (the `.near`
+       seat), and so does this hint -- lift it above the card so the two do not
+       overlap. A spectator picking a seat has no card there, so its hint stays
+       at the bottom. -->
   {#if canPick}
     <div class="hint">点一个空位坐下</div>
   {:else if awaitingOthers}
-    <div class="hint {$store.host === $myName ? 'above-button' : ''}">
+    <div class="hint above-seat">
       等待其他玩家 ({readyCount}/{seatedList.length})
     </div>
   {:else if mySeat && isWaiting(mySeat)}
-    <div class="hint">已入座，下一局开始</div>
+    <div class="hint above-seat">已入座，下一局开始</div>
   {:else if mySeat && $store.host !== $myName}
-    <div class="hint">等待房主开始</div>
+    <div class="hint above-seat">等待房主开始</div>
   {/if}
 {/if}
 
@@ -327,9 +329,11 @@
     pointer-events: none;
   }
 
-  /* Clears the 50px-tall start button plus its own bottom offset. */
-  .hint.above-button {
-    bottom: calc(clamp(20px, 5vh, 50px) + 62px);
+  /* Sits above the viewer's own name card (the `.near` seat), whose own bottom
+     offset is clamp(84px, 16vh, 150px); clear its height on top of that so the
+     hint and the name never overlap. */
+  .hint.above-seat {
+    bottom: calc(clamp(84px, 16vh, 150px) + 96px);
   }
 
   .hint {

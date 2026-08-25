@@ -3,6 +3,9 @@ import { get } from "svelte/store";
 
 const TIMER_DURATION = 6000;
 let haClaimsHandle = null;
+// The pending auto-ignore for a seat with nothing to decide, held so it can be
+// cast the moment another seat acts instead of idling out its full delay.
+let haClaimsFallback = null;
 
 function hasActions(schema, myWind) {
   if (!myWind) return false; // a spectator has no hand to act with
@@ -135,6 +138,7 @@ export default async function handler(
         window.clearTimeout((get(timer) || {}).handle);
         window.clearTimeout(haClaimsHandle);
         haClaimsHandle = null;
+        haClaimsFallback = null;
         timer.set(null);
         const { position, tile, reveal, hasClaims } = message.body;
         currentVotes.set({ [position]: { method: "Discard", priority: 0 } });
@@ -192,6 +196,14 @@ export default async function handler(
             // auto-vote so their claim isn't cut off -- deliberately a bare
             // setTimeout rather than `timer.set`, so no buttons appear on a seat
             // with no decision to make.
+            //
+            // The delay is only there to hold the round open until a claimer has
+            // had the chance to act. Once any of them actually votes (the "vote"
+            // case brings this forward), there is nothing left to wait for, so
+            // the pending ignore is kept here to be cast the moment that happens
+            // rather than idling out the full duration -- which otherwise made a
+            // claim that resolved instantly still sit for the remaining seconds.
+            haClaimsFallback = fallback;
             haClaimsHandle = window.setTimeout(fallback, TIMER_DURATION);
           } else {
             // Nobody has any claim on this discard -- keep things moving.
@@ -268,6 +280,19 @@ export default async function handler(
       case "vote": {
         const { position, vote } = message.body;
         currentVotes.update((votes) => ({ ...votes, [position]: vote }));
+        // A seat waiting only to keep the round open (the `hasClaims` branch of
+        // "discard") was giving claimers time to act. Someone just did, so there
+        // is no longer anything to wait for -- cast the pending ignore now rather
+        // than making everyone sit out the rest of the delay. Priority 0 means it
+        // can only ever resolve a round every claimer has already answered, so
+        // bringing it forward cuts nobody off.
+        if (haClaimsFallback) {
+          window.clearTimeout(haClaimsHandle);
+          const pending = haClaimsFallback;
+          haClaimsHandle = null;
+          haClaimsFallback = null;
+          pending();
+        }
         break;
       }
       case "exposeWildcard": {

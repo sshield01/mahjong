@@ -12,6 +12,7 @@
   import ReclaimSeat from './ReclaimSeat.svelte';
   import OpenSeats from './OpenSeats.svelte';
   import LeaveButton from './LeaveButton.svelte';
+  import ConfirmDialog from './ConfirmDialog.svelte';
   import context from '../../game/context.js';
 
   const { store, myName } = context();
@@ -26,6 +27,10 @@
 
   $: mySeat = $store.seatOf($myName);
 </script>
+
+<!-- Shared styled confirmation, available for the whole session (e.g. the
+     two-wildcard claim warning), so it is never blocked by native dialogs. -->
+<ConfirmDialog />
 
 {#if $store.started}
   <Timer />
