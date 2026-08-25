@@ -136,10 +136,22 @@
   const DISCARD_STAGGER_PX = 3;
   const DISCARD_CENTRE_PX = ((DISCARD_SIZE - 1) * DISCARD_STAGGER_PX) / 2;
 
+  // Air between one discard and the next. They used to be pitched at exactly a
+  // tile width, so every tile touched its neighbour and the row read as one
+  // continuous strip rather than a line of separate tiles -- worst where it
+  // matters most, since the live discard is scaled up to be picked out and grew
+  // straight into the tiles either side of it.
+  //
+  // The row is centred in the square the walls enclose, roughly 61.75 wide
+  // against the 47.2 this pitch gives a full row of ten, so the gap is paid for
+  // out of margin the pile was not using.
+  const DISCARD_GAP = 0.8;
+  const DISCARD_PITCH = TILE_WIDTH + DISCARD_GAP;
+
   // Where the row's first tile goes, and the pixel nudge that cancels the row's
   // own stagger so it stays centred at any table size.
   const DISCARD_START =
-    SQUARE_CENTRE_PCT - ((DISCARD_SIZE - 1) * TILE_WIDTH) / 2 - TILE_WIDTH / 2;
+    SQUARE_CENTRE_PCT - ((DISCARD_SIZE - 1) * DISCARD_PITCH) / 2 - TILE_WIDTH / 2;
   const DISCARD_NUDGE_PX = -DISCARD_CENTRE_PX;
   function discardPosition(wind) {
     switch (wind) {
@@ -285,7 +297,7 @@
         const i = store[wind].discarded.indexOf(index);
         const j = i % DISCARD_SIZE;
         const k = Math.floor(i / DISCARD_SIZE);
-        const horizontal = j * TILE_WIDTH;
+        const horizontal = j * DISCARD_PITCH;
         // Extra rows grow back toward this player's own hand, not toward the
         // table's center -- otherwise, in a long hand, four independently-growing
         // discard piles converge and overlap in the middle of the table. They
@@ -507,14 +519,21 @@
      goes on the wrapper, whose transform sits outside the tile's own placement, so
      it is always straight up off the table whichever wall the tile belongs to.
      Breaking the wall's silhouette reads from any angle, which a colour on a
-     near-edge-on face does not. */
+     near-edge-on face does not.
+
+     It rises above a two-high wall stack (2 x TILE_DEPTH, 4.6 of these units)
+     rather than hovering within it. The first lift cleared the wall only at the
+     top of its bob, so for most of the cycle the tile was still a sliver among
+     its neighbours and an awkward thing to hit. Height is also size here -- the
+     table is drawn in perspective, so raising it moves it toward the camera and
+     the target grows with the clearance. */
   .selection.drawable {
     animation: offer 1.8s ease-in-out infinite;
   }
 
   @keyframes offer {
-    0%, 100% { transform: translateZ(min(1.5vw, 1.5vh)); }
-    50%      { transform: translateZ(min(3.2vw, 3.2vh)); }
+    0%, 100% { transform: translateZ(min(4vw, 4vh)); }
+    50%      { transform: translateZ(min(7vw, 7vh)); }
   }
 
   /* Colour every face, not just the back. The generic clickable palette leaves the
@@ -530,7 +549,7 @@
   @media (prefers-reduced-motion: reduce) {
     .selection.drawable {
       animation: none;
-      transform: translateZ(min(2.4vw, 2.4vh));
+      transform: translateZ(min(5.5vw, 5.5vh));
     }
   }
 </style>

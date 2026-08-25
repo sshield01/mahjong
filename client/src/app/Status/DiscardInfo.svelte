@@ -4,7 +4,7 @@
 
   export let tile;
 
-  const { discardAction, timer } = context();
+  const { discardAction } = context();
 
   let style;
   $: {
@@ -15,10 +15,19 @@
     }
   };
 
-  // Gated on 想想: only once the player has paused the countdown does this become
-  // a claim target. Before that it stays the plain indicator, so nothing new can
-  // be misclicked during the few seconds when play is still moving normally.
-  $: claimable = !!$discardAction && !!$timer && !!$timer.paused;
+  // A claim target whenever there is a claim to make -- the same rule the tile
+  // in the pile follows, so the two are never live at different moments.
+  //
+  // This used to wait for 想想 to stop the countdown, on the reasoning that
+  // nothing new should be misclickable while play is still moving. But the tile
+  // in the pile was never gated that way, so the protection only ever covered
+  // one of the two ways to make the same claim -- and on your own turn no clock
+  // is armed at all, which left the big tile permanently dead exactly when the
+  // table was waiting for you to decide.
+  //
+  // `$discardAction` is null unless this player holds a claim, so the indicator
+  // stays inert for anyone with nothing to do with the tile.
+  $: claimable = !!$discardAction;
 
   function claim() {
     if (claimable) $discardAction();

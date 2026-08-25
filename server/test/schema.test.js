@@ -171,3 +171,53 @@ describe("winning hands", () => {
     assert.equal(Schema.winningHand(schema, schema.Nan), false);
   });
 });
+
+describe("claiming a run", () => {
+  // Taking a discard as a 吃 belongs to the player in turn, but going out on the
+  // run it completes does not -- a Win outranks every other vote, whoever casts
+  // it. The client leans on that: it arms the claim clock for a run that wins
+  // from any seat, and only offers the plain 吃 to the seat in turn. If this ever
+  // starts requiring the turn, that clock stops arming and the seat holding the
+  // winning hand answers `ignore` on its own, throwing the win away in silence.
+  test("a seat that is not in turn may still chow", () => {
+    // Three 1-Pin, three 2-Pin, three 3-Pin, then plain filler, so whoever holds
+    // the 2 and 3 can take a 1 off the table.
+    const tiles = [];
+    for (let i = 0; i < 3; ++i) tiles.push({ suit: "Pin", value: 1 });
+    for (let i = 0; i < 3; ++i) tiles.push({ suit: "Pin", value: 2 });
+    for (let i = 0; i < 3; ++i) tiles.push({ suit: "Pin", value: 3 });
+    while (tiles.length < 136) tiles.push({ suit: "Man", value: 9 });
+
+    const schema = new Schema({ name: "r", tiles });
+    seat(schema, "Ton", "Alice");
+    seat(schema, "Nan", "Bob");
+    seat(schema, "Shaa", "Cass");
+    schema.started = true;
+
+    // Ton has discarded a 1-Pin. The turn has passed to Nan, so Shaa is the seat
+    // that is emphatically not in turn.
+    schema.Ton = { ...schema.Ton, up: [], down: [], discarded: [0] };
+    schema.Shaa = { ...schema.Shaa, up: [3, 6], down: [], discarded: [] };
+    schema.previousTurn = "Ton";
+    schema.turn = "Nan";
+    schema.discarded = 0;
+
+    const message = schema.chow("Shaa", [3, 6]);
+
+    assert.equal(message.subject, "take");
+    assert.deepEqual(schema.Shaa.down, [[3, 6, 0]], "the run is melded");
+    assert.equal(schema.turn, "Shaa", "and the turn follows the claim");
+  });
+
+  test("but nobody may pick up their own discard", () => {
+    const schema = new Schema({ name: "r", tiles: allWindTiles() });
+    seat(schema, "Ton", "Alice");
+    seat(schema, "Nan", "Bob");
+    schema.started = true;
+    schema.previousTurn = "Ton";
+    schema.turn = "Nan";
+    schema.discarded = 0;
+
+    assert.throws(() => schema.chow("Ton", [1, 2]), /your own discard/);
+  });
+});
