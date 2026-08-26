@@ -616,15 +616,21 @@ describe("scoring", () => {
   // discard, whatever the wildcards were actually doing, so 无癞子 was never
   // awarded on one.
   //
-  // 南南南 here is a plain triplet -- the hand does not lean on the wildcard at
-  // all -- so it has to score exactly as it would with no wildcard in sight.
-  function claimedTripleSouth() {
+  // The 9-Pin here is the wildcard, sitting in 789 as itself -- the hand does not
+  // lean on it at all -- so it has to score exactly as it would with no wildcard
+  // in sight.
+  //
+  // One wildcard, deliberately. Two or more and the hand may not claim a pair off
+  // the table at all: that restriction counts wildcards held rather than wildcards
+  // relied upon, so a hand holding a plain triplet of them is refused along with
+  // the rest, and this scoring rule would never get a chance to apply.
+  function claimedRunWithFaceValueWildcard() {
     const { schema, seat } = table();
-    schema.wildcard = W("Nan");
+    schema.wildcard = T("Pin", 9);
     seat("Ton", "A", { up: [T("Sou", 5)] });
     seat("Nan", "B", {
       up: [
-        W("Nan"), W("Nan"), W("Nan"),
+        T("Pin", 7), T("Pin", 8), T("Pin", 9),
         T("Man", 1), T("Man", 2), T("Man", 3),
         T("Man", 7), T("Man", 8), T("Man", 9),
         T("Sou", 5),
@@ -637,12 +643,12 @@ describe("scoring", () => {
   }
 
   test("a wildcard at face value counts as wildcard-free on a claimed win too", () => {
-    const held = claimedTripleSouth();
+    const held = claimedRunWithFaceValueWildcard();
     const withWildcardHeld = held.computeRoundScore("Nan").calcLoserScore(false, true, 0);
 
     // The same hand scored as though that tile were never the wildcard.
-    const baseline = claimedTripleSouth();
-    baseline.wildcard = T("Pin", 9); // held by nobody
+    const baseline = claimedRunWithFaceValueWildcard();
+    baseline.wildcard = T("Sou", 1); // held by nobody
     const withNoWildcardAtAll = baseline
       .computeRoundScore("Nan")
       .calcLoserScore(false, true, 0);

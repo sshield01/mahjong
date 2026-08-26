@@ -32,11 +32,19 @@
   let myDiscard;
   $: myDiscard = $store && $store.previousTurn === myWind;
 
-  // Two or more wildcards in hand makes a regular 胡 unlikely, and a player who
-  // melds one away (吃/碰/杠) or declares on this shape may be giving up a bigger
-  // hand without realising it. Warn once, before the first such action -- but
-  // only while the hand is still concealed: once a meld is down the choice is
-  // already made and the prompt would just nag on every later claim.
+  // Two or more wildcards in hand and a regular 胡 needs the hand to stay
+  // concealed, be all one suit, or have the wildcards declared. Melding (吃/碰/杠)
+  // spends the concealment, so a player can quietly close off the win they were
+  // holding. Warn before that -- but only while the hand still is concealed: once
+  // a meld is down the choice has been made and the prompt would just nag.
+  //
+  // Not on 胡. Every 胡 offered here was built by asking `winningHand` about the
+  // hand the claim actually produces -- the pong and chow ones simulate the meld
+  // first -- and that question already applies the two-wildcard rule. So a 胡 on
+  // screen is a win the server will accept, and warning about a hand being
+  // spoiled while the player is in the act of winning with it is nonsense. It
+  // fired most often on exactly the hands that were fine: a concealed 门清 win,
+  // or a 七对, which the scoring skips the wildcard rule for outright.
   function confirmWildcards() {
     const storeValue = $store;
     if (!myWind || !storeValue || !storeValue.wildcard) return true;
@@ -205,7 +213,6 @@
             label: '胡',
             win: true,
             async handler() {
-              if (!(await confirmWildcards())) return;
               try {
                 await socket.send('win', { method: 'Pong' });
                 selection.set(new Set);
@@ -243,7 +250,6 @@
           label: '胡',
           win: true,
           async handler() {
-            if (!(await confirmWildcards())) return;
             try {
               await socket.send('win', { method: 'Eyes' });
               selection.set(new Set);
@@ -266,7 +272,6 @@
         label: '胡',
         win: true,
         async handler() {
-          if (!(await confirmWildcards())) return;
           try {
             await socket.send('win', { method: 'Chow', tiles });
             selection.set(new Set);

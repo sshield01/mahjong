@@ -338,9 +338,24 @@ export default class Schema {
       }
     }
 
+    // Two or more wildcards in hand, and the hand has to earn them: declare them,
+    // be one suit throughout, or owe nobody a tile. 全风, 全将, 碰碰胡 and 七对 are
+    // already gone above -- exempt by shape, discard or no discard.
+    //
+    // 门清 is not exempt that way, because taking a tile off the table is exactly
+    // what it means not to be 门清. An empty `down` was the whole test, and that
+    // holds for a meld but not for the pair: a win claimed on the discard is
+    // checked before `eyes()` moves that pair into `down`, so a hand sitting on
+    // two wildcards read as concealed at the one moment it was reaching for
+    // someone else's tile. `eye` is set precisely then. The scoring already drew
+    // this line -- its own 门清 is `down.length === 0 && isSelfDraw`.
+    //
+    // Counted by wildcards *held*, not wildcards leaned on: a hand can hold three
+    // 南 as a plain triplet and still not claim a pair off the table.
+    const claimingDiscard = eye !== null && eye !== undefined;
     const wildcardCount = tiles.filter(isWild).length;
     const hasExposedWildcards = (player.exposedWildcards || []).length > 0;
-    const isAllClear = player.down.length === 0;
+    const isAllClear = player.down.length === 0 && !claimingDiscard;
     if (wildcardCount >= 2 && !hasExposedWildcards && !isAllClear && !allSameKind()) {
       return false;
     }

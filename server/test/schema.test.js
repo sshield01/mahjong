@@ -282,6 +282,44 @@ describe("claiming a run", () => {
     assert.equal(schema.turn, "Shaa", "and the turn follows the claim");
   });
 
+  // Holding two or more wildcards, a regular 胡 has to be earned: declare them,
+  // be one suit throughout, or owe nobody a tile. That last one is 门清, and
+  // taking a tile off the table is exactly what it means not to be 门清 -- so a
+  // concealed hand may not reach for the discard as its pair either.
+  //
+  // Held, not leaned on: the triplet below is three real 南 with nothing standing
+  // in for anything, and it is refused all the same.
+  test("two wildcards in hand cannot claim a discard as their pair", () => {
+    const tiles = [];
+    const put = (list) => list.map((t) => (tiles.push(t), tiles.length - 1));
+    const schema = new Schema({ name: "r", tiles, walls: [] });
+
+    const hand = put([
+      { suit: "wind", value: "Nan" }, { suit: "wind", value: "Nan" }, { suit: "wind", value: "Nan" },
+      { suit: "Man", value: 1 }, { suit: "Man", value: 2 }, { suit: "Man", value: 3 },
+      { suit: "Man", value: 7 }, { suit: "Man", value: 8 }, { suit: "Man", value: 9 },
+      { suit: "Sou", value: 5 },
+    ]);
+    const [discard] = put([{ suit: "Sou", value: 5 }]);
+
+    schema.Nan = { name: "B", up: hand, down: [], discarded: [], ready: false, exposedWildcards: [] };
+    schema.wildcard = { suit: "wind", value: "Nan" };
+
+    const claiming = { ...schema.Nan, up: [...hand, discard] };
+    assert.equal(
+      Schema.winningHand(schema, claiming, discard),
+      false,
+      "a concealed hand is not 门清 while it is taking somebody's discard",
+    );
+
+    // Self-drawn, the same shape wins: nothing was taken, so 门清 stands.
+    assert.equal(
+      Schema.winningHand(schema, claiming),
+      true,
+      "and the identical hand is fine when nobody helped build it",
+    );
+  });
+
   test("no kong once the hand is down to its last lap", () => {
     const schema = new Schema({ name: "r", tiles: allWindTiles() });
     seat(schema, "Ton", "Alice");
