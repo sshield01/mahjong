@@ -1,240 +1,32 @@
 <script>
   import context from '../../game/context';
-  import Schema, { eq, dealerSeat } from '../../lib/schema';
+  import Schema from '../../lib/schema';
 
   const { store, socket, myName } = context();
 
   $: winner = $store[$store.turn];
-  $: allTiles = [...winner.up, ...winner.down.flat()]
-    .filter(tile => typeof tile === 'number')
-    .map(tile => $store.tiles[tile]);
 
-  // 庄家 is the first occupied seat in turn order, not whoever holds 东 -- players
-  // pick their own chairs, so 东 is often empty. Asking the shared helper keeps
-  // this panel and the scoring that produced the totals below it in agreement.
-  $: dealer = dealerSeat($store);
-  $: isDealer = $store.turn === dealer;
-  $: isSelfDraw = $store.source === 'front' || $store.source === 'back';
-  // Taken on a tile from the wall's last lap.
-  $: isFinalDraw = !!$store.finalDraw;
-  // 杠上开花 -- won on the replacement tile a kong drew. Only a kong replaces
-  // from the back of the wall, so that source is the flower itself.
-  $: isKongBloom = $store.source === 'back';
   // 黄庄: the wall ran down with nobody out, so there is no hand to lay out --
   // the dealer just collects a flat two from each of the others.
   $: washedOut = !!$store.washedOut;
   $: washOutLosers = ['Ton', 'Nan', 'Shaa', 'Pei']
-    .filter(wind => $store[wind] && wind !== $store.turn)
+    .filter(wind => $store[wind] && !$store[wind].waiting && wind !== $store.turn)
     .map(wind => $store[wind].name);
 
-  $: isPongpong = (() => {
-    const isW = t => $store.wildcard && eq(t, $store.wildcard);
-    const hasPairInDown = winner.down.some(meld => {
-      const meldTiles = meld.filter(t => typeof t === 'number');
-      return meldTiles.length === 2;
-    });
-    const downValid = winner.down.every(meld => {
-      const meldTiles = meld.filter(t => typeof t === 'number').map(t => $store.tiles[t]);
-      return (meldTiles.length >= 3 && meldTiles.every(t => eq(t, meldTiles[0]))) ||
-        meldTiles.length === 2;
-    });
-    if (!downValid) return false;
-    const handTiles = winner.up.map(t => $store.tiles[t]);
-    const nonWild = handTiles.filter(t => !isW(t));
-    const wilds = handTiles.length - nonWild.length;
-
-    if (hasPairInDown) {
-      let triplets = [...nonWild];
-      let w = wilds;
-      let valid = true;
-      while (triplets.length > 0) {
-        const f = triplets[0];
-        const c = triplets.filter(t => eq(t, f)).length;
-        if (c >= 3) {
-          let r = 0;
-          triplets = triplets.filter(t => !(eq(t, f) && ++r <= 3));
-        } else if (c + w >= 3) {
-          w -= (3 - c);
-          triplets = triplets.filter(t => !eq(t, f));
-        } else { valid = false; break; }
-      }
-      if (valid && w % 3 === 0) return true;
-      return false;
-    }
-
-    for (let i = 0; i < nonWild.length; i++) {
-      if (nonWild.slice(0, i).some(t => eq(t, nonWild[i]))) continue;
-      const cnt = nonWild.filter(t => eq(t, nonWild[i])).length;
-      if (cnt >= 2) {
-        const rest = [];
-        let pairRemoved = 0;
-        for (const t of nonWild) {
-          if (eq(t, nonWild[i]) && pairRemoved < 2) { pairRemoved++; continue; }
-          rest.push(t);
-        }
-        let triplets = [...rest];
-        let w = wilds;
-        let valid = true;
-        while (triplets.length > 0) {
-          const f = triplets[0];
-          const c = triplets.filter(t => eq(t, f)).length;
-          if (c >= 3) {
-            let r = 0;
-            triplets = triplets.filter(t => !(eq(t, f) && ++r <= 3));
-          } else if (c + w >= 3) {
-            w -= (3 - c);
-            triplets = triplets.filter(t => !eq(t, f));
-          } else { valid = false; break; }
-        }
-        if (valid && w % 3 === 0) return true;
-      }
-    }
-    // pair with wildcard
-    if (wilds >= 1 && nonWild.length % 3 === 0) {
-      let triplets = [...nonWild];
-      let w = wilds - 1;
-      let valid = true;
-      while (triplets.length > 0) {
-        const f = triplets[0];
-        const c = triplets.filter(t => eq(t, f)).length;
-        if (c >= 3) {
-          let r = 0;
-          triplets = triplets.filter(t => !(eq(t, f) && ++r <= 3));
-        } else if (c + w >= 3) {
-          w -= (3 - c);
-          triplets = triplets.filter(t => !eq(t, f));
-        } else { valid = false; break; }
-      }
-      if (valid && w % 3 === 0) return true;
-    }
-    return false;
-  })();
-
-  $: isAllClear = winner.down.length === 0 && isSelfDraw;
-  $: isAllFromOthers = !isSelfDraw && winner.down.length >= 4;
-
-  $: isAllPairs = (() => {
-    const allIndices = [...winner.up, ...winner.down.flat().filter(t => typeof t === 'number')];
-    if (allIndices.length !== 14) return false;
-    if (winner.down.length > 1) return false;
-    const tiles = allIndices.map(t => $store.tiles[t]);
-    const wild = $store.wildcard;
-    const isW = (t) => wild && eq(t, wild);
-    let wilds = tiles.filter(isW).length;
-    const normals = tiles.filter(t => !isW(t));
-    const remaining = [...normals];
-    while (remaining.length) {
-      const tile = remaining.pop();
-      const idx = remaining.findIndex(other => eq(tile, other));
-      if (idx === -1) {
-        if (wilds > 0) { wilds--; } else { return false; }
-      } else {
-        remaining.splice(idx, 1);
-      }
-    }
-    return wilds % 2 === 0;
-  })();
-
-  $: nonWildTiles = allTiles.filter(t => !($store.wildcard && eq(t, $store.wildcard)));
-  $: isAllJiang = nonWildTiles.every(t => typeof t.value === 'number' && [2, 5, 8].includes(t.value));
-  $: isAllWinds = nonWildTiles.every(t => t.suit === 'wind');
-  $: isAllSameKind = (() => {
-    const nonWild = allTiles.filter(t => !($store.wildcard && eq(t, $store.wildcard)));
-    if (nonWild.length === 0) return true;
-    const suit = nonWild[0].suit;
-    return nonWild.every(t => t.suit === suit);
-  })();
-
-  $: hasNoWildcard = (() => {
-     if (!$store.wildcard) return true;
-	 if (!allTiles.some(t => eq(t, $store.wildcard))) return true;
-	 // The same fold the server does. A win claimed by pairing the discard
-	 // records that pair as a two-tile group in `down`, which leaves `up` one
-	 // short of the 3n+2 shape `winningHand` will even look at -- so this
-	 // answered "no" for every such win however the wildcards were being used,
-	 // and 无癞子 went missing from the breakdown while the server was doubling
-	 // the score for it. The scoreboard has to reach the same verdict as the
-	 // scoring does.
-	 const pair = winner.down.find(meld => meld.length === 2);
-	 const restored = pair
-	   ? { ...winner, up: [...winner.up, ...pair], down: winner.down.filter(meld => meld !== pair) }
-	   : winner;
-	 const noWildStore = { ...$store, wildcard: null };
-	 return Schema.winningHand(noWildStore, restored);
-  })();
-
-  $: kongCount = winner.down.filter(meld => meld.length >= 5).length;
-
-  $: pairsFourOfAKind = (() => {
-    if (!isAllPairs) return 0;
-    const nonWild = allTiles.filter(t => !($store.wildcard && eq(t, $store.wildcard)));
-    const counts = {};
-    for (const t of nonWild) {
-      const key = t.suit + '|' + t.value;
-      counts[key] = (counts[key] || 0) + 1;
-    }
-    return Object.values(counts).filter(c => c === 4).length;
-  })();
-
-  // 黄庄 has no winning hand to score, so none of this applies.
-  $: scoreBreakdown = washedOut ? { lines: [], losers: [], winnerTotal: 0 } : (() => {
-    const WINDS = ['Ton', 'Shaa', 'Pei', 'Nan'];
-
-    function calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount) {
-      let base = 1;
-      if (isLoserDealer || isDealer) base *= 2;
-      if (isLoserDiscarder) base *= 2;
-      let score = base;
-      if (isPongpong && !isAllPairs) score += 5;
-      if (isAllClear) score += 5;
-      if (isAllFromOthers) score += 5;
-      if (isAllPairs) score += 10;
-      if (isAllJiang) score += 10;
-      if (isAllWinds) score += 10;
-      if (isAllSameKind) score += 10;
-      if (isFinalDraw) score += 10;
-      if (isKongBloom) score += 10;
-      if (hasNoWildcard) score *= 2;
-      for (let i = 0; i < kongCount + loserKongCount; i++) score *= 2;
-      for (let i = 0; i < pairsFourOfAKind; i++) score *= 2;
-      return score;
-    }
-
-    const lines = [];
-    lines.push({ label: '胡', value: '1' });
-    if (isPongpong && !isAllPairs) lines.push({ label: '碰碰胡', value: '+5' });
-    if (isAllClear) lines.push({ label: '门清', value: '+5' });
-    if (isAllFromOthers) lines.push({ label: '全求人', value: '+5' });
-    if (isAllPairs) lines.push({ label: '七对', value: '+10' });
-    if (isAllJiang) lines.push({ label: '全将', value: '+10' });
-    if (isAllWinds) lines.push({ label: '全风', value: '+10' });
-    if (isAllSameKind) lines.push({ label: '清一色', value: '+10' });
-    if (isFinalDraw) lines.push({ label: '海底捞', value: '+10' });
-    if (isKongBloom) lines.push({ label: '杠上开花', value: '+10' });
-    for (let i = 0; i < kongCount; i++) lines.push({ label: '杠', value: 'x2' });
-    for (let i = 0; i < pairsFourOfAKind; i++) lines.push({ label: '豪华', value: 'x2' });
-
-    const losers = [];
-    let winnerTotal = 0;
-    for (const wind of WINDS) {
-      if ($store[wind] && wind !== $store.turn) {
-        const isLoserDealer = wind === dealer;
-        const isLoserDiscarder = isSelfDraw || wind === $store.previousTurn;
-        const loserKongCount = $store[wind].down.filter(meld => meld.length >= 5).length;
-		const rawScore = calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount);
-        const payment = Math.min(30, rawScore);
-        const reasons = [];
-        if (isLoserDealer) reasons.push('庄家');
-        if (isLoserDiscarder) reasons.push(isSelfDraw ? '自摸' : '放炮');
-        if (loserKongCount > 0) reasons.push(`杠x${loserKongCount}`);
-        losers.push({ name: $store[wind].name, payment, rawScore, reasons });
-        winnerTotal += payment;
-      }
-    }
-    if (hasNoWildcard) lines.push({ label: '无癞子', value: 'x2' });
-
-    return { lines, losers, winnerTotal };
-  })();
+  // What the hand actually scored, itemised by the code that scored it and sent
+  // with the win. This panel used to work it all out again from the finished
+  // hand -- every flag, every multiplier, the dealer, the payments -- and the
+  // second derivation drifted from the first four separate times: 无癞子 went
+  // missing on claimed wins, 杠上开花 had to be added in two places, the dealer's
+  // double was looked up by the wrong seat, and a chair reserved mid-hand was
+  // billed for a hand it never played. Each one printed a breakdown that
+  // contradicted the running totals just below it, and each was found by a
+  // player reading the screen rather than by a test, because nothing here is
+  // reachable from one.
+  //
+  // A hand from before this was sent, or a client that missed the message, has
+  // nothing to itemise -- show the totals alone rather than a wrong guess.
+  $: scoreBreakdown = $store.breakdown || { lines: [], losers: [], winnerTotal: 0 };
 
   async function playAgain() {
     const { schema } = await socket.send('playAgain');

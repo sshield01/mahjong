@@ -359,10 +359,14 @@ export default async function handler(
         selectionSets.set([]);
         selection.set(new Set());
         timer.set(null);
-        const { position, eyes, reveal, kong, scores, washedOut, finalDraw } = message.body;
+        const { position, eyes, reveal, kong, scores, washedOut, finalDraw, breakdown } = message.body;
         schema.turn = position;
         schema.tiles = reveal;
         schema.completed = true;
+        // How the hand was scored, itemised by the same code that did the
+        // scoring. The scoreboard prints this rather than deriving it a second
+        // time from the finished hand, which is what used to drift.
+        schema.breakdown = breakdown;
         // 黄庄 has no winning hand to lay out, and 海底捞 adds a bonus line --
         // the scoreboard needs to know which ending this was.
         schema.washedOut = !!washedOut;

@@ -745,4 +745,61 @@ describe("scoring", () => {
       "杠上开花 is worth exactly what 海底捞 is worth, both being ten before the multipliers",
     );
   });
+
+  // The scoreboard used to derive all of this a second time from the finished
+  // hand, and the second derivation drifted from the first four separate times --
+  // each one printing a breakdown that contradicted the totals underneath it, and
+  // each one found by a player rather than a test, because a Svelte component is
+  // not reachable from one. It is served with the win now, so these are.
+  describe("the breakdown the scoreboard is given", () => {
+    test("adds up to the scores it just recorded", () => {
+      const schema = sevenPairsWin();
+      const before = { ...schema.scores };
+      const breakdown = schema.updateScores("Ton");
+
+      const paid = breakdown.losers.reduce((total, l) => total + l.payment, 0);
+      assert.equal(
+        breakdown.winnerTotal,
+        paid,
+        "the winner collects exactly what the losers are shown paying",
+      );
+      assert.equal(
+        schema.scores.A - (before.A || 0),
+        breakdown.winnerTotal,
+        "and that is what the winner's running score moved by",
+      );
+      for (const loser of breakdown.losers) {
+        assert.equal(
+          schema.scores[loser.name] - (before[loser.name] || 0),
+          -loser.payment,
+          `${loser.name}'s running score moved by what the panel says`,
+        );
+      }
+    });
+
+    test("names the hand's bonuses", () => {
+      const schema = sevenPairsWin();
+      const { lines } = schema.updateScores("Ton");
+      const labels = lines.map((line) => line.label);
+
+      assert.equal(labels[0], "胡", "the base point leads");
+      assert.ok(labels.includes("七对"), "an all-pairs hand says so");
+      assert.ok(labels.includes("全风"), "and that it is all winds");
+    });
+
+    test("leaves out a chair reserved mid-hand", () => {
+      const schema = sevenPairsWin();
+      schema.Shaa = {
+        name: "Late", up: [], down: [], discarded: [], ready: false,
+        exposedWildcards: [], waiting: true,
+      };
+
+      const { losers } = schema.updateScores("Ton");
+      assert.ok(
+        !losers.some((loser) => loser.name === "Late"),
+        "a seat holding no tiles is not billed for the hand",
+      );
+      assert.equal(schema.scores.Late, undefined, "nor charged behind the scenes");
+    });
+  });
 });

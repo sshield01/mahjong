@@ -456,6 +456,10 @@ export default class Schema {
     // along so a reloading client and the scoreboard can tell what happened.
     this.finalDraw = basis.finalDraw || false;
     this.washedOut = basis.washedOut || false;
+    // How the finished hand was scored, itemised. Rides along so a client that
+    // reconnects to a completed hand -- or reloads one from the state file --
+    // still has the breakdown to show.
+    this.breakdown = basis.breakdown;
 
     this.tiles = basis.tiles || shuffle([...tiles()]);
     this.walls = basis.walls || [...walls(this.tiles.length)];
@@ -716,6 +720,11 @@ export default class Schema {
     }
     this.scores[winner] += total;
 
+    // 黄庄 has no hand to lay out, so there is nothing to itemise. The scoreboard
+    // prints its own flat two-a-head summary for this ending; the empty shape is
+    // here so `breakdown` is always present once a hand has finished.
+    this.breakdown = { lines: [], losers: [], winnerTotal: total };
+
     return new Message("win", {
       position,
       reveal: this.tiles,
@@ -724,6 +733,7 @@ export default class Schema {
       allClear: false,
       allFromOthers: false,
       scores: this.scores,
+      breakdown: this.breakdown,
     });
   }
 
@@ -990,7 +1000,7 @@ export default class Schema {
     const allClear = false;
     const allFromOthers = this[position].down.length >= 4;
     this.updateScores(position);
-    return new Message("win", { position, eyes, reveal: this.tiles, kong, allClear, allFromOthers, scores: this.scores });
+    return new Message("win", { position, eyes, reveal: this.tiles, kong, allClear, allFromOthers, scores: this.scores, breakdown: this.breakdown });
   }
 
   computeRoundScore(position) {
@@ -1227,28 +1237,67 @@ export default class Schema {
       return score;
     }
 
-    return { isSelfDraw, calcLoserScore };
+    // The same flags again, named for the player. Built here rather than on the
+    // scoreboard because the scoreboard used to derive all of this a second time
+    // from the finished hand, and a second derivation drifts: 无癞子 went missing
+    // on claimed wins, 杠上开花 had to be added twice, the dealer's double was
+    // looked up by the wrong seat, and a chair reserved mid-hand was billed for a
+    // hand it never played. Every one of those showed a breakdown that disagreed
+    // with the totals printed underneath it, and every one was found by somebody
+    // reading the screen. Say it once, where the scoring is.
+    const lines = [{ label: "胡", value: "1" }];
+    if (isPongpong && !isAllPairs) lines.push({ label: "碰碰胡", value: "+5" });
+    if (isAllClear) lines.push({ label: "门清", value: "+5" });
+    if (isAllFromOthers) lines.push({ label: "全求人", value: "+5" });
+    if (isAllPairs) lines.push({ label: "七对", value: "+10" });
+    if (isAllJiang) lines.push({ label: "全将", value: "+10" });
+    if (isAllWinds) lines.push({ label: "全风", value: "+10" });
+    if (isAllSameKind) lines.push({ label: "清一色", value: "+10" });
+    if (isFinalDraw) lines.push({ label: "海底捞", value: "+10" });
+    if (isKongBloom) lines.push({ label: "杠上开花", value: "+10" });
+    for (let i = 0; i < kongCount; i++) lines.push({ label: "杠", value: "x2" });
+    for (let i = 0; i < pairsFourOfAKind; i++) lines.push({ label: "豪华", value: "x2" });
+    if (hasNoWildcard) lines.push({ label: "无癞子", value: "x2" });
+
+    return { isSelfDraw, calcLoserScore, lines };
   }
 
+  // Settles the hand and records how it was settled. The breakdown rides on the
+  // schema so it survives a reconnect and the state file, and goes out with the
+  // "win" message so the scoreboard can print what was actually scored rather
+  // than working it out again.
   updateScores(position) {
-    const { isSelfDraw, calcLoserScore } = this.computeRoundScore(position);
+    const { isSelfDraw, calcLoserScore, lines } = this.computeRoundScore(position);
     const winnerName = this[position].name;
     if (!this.scores[winnerName]) this.scores[winnerName] = 0;
 
+    const losers = [];
     let winnerTotal = 0;
     for (const wind of WINDS) {
       if (this[wind] && !this[wind].waiting && wind !== position) {
         const isLoserDealer = wind === dealerSeat(this);
         const isLoserDiscarder = isSelfDraw || wind === this.previousTurn;
         const loserKongCount = this[wind].down.filter((meld) => meld.length >= 5).length;
-        const payment = Math.min(30, calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount));
+        const rawScore = calcLoserScore(isLoserDealer, isLoserDiscarder, loserKongCount);
+        // Nobody pays more than 30, however big the hand. The raw figure travels
+        // too, so the scoreboard can show what was earned beside what was paid.
+        const payment = Math.min(30, rawScore);
         const name = this[wind].name;
         if (!this.scores[name]) this.scores[name] = 0;
         this.scores[name] -= payment;
         winnerTotal += payment;
+
+        const reasons = [];
+        if (isLoserDealer) reasons.push("庄家");
+        if (isLoserDiscarder) reasons.push(isSelfDraw ? "自摸" : "放炮");
+        if (loserKongCount > 0) reasons.push(`杠x${loserKongCount}`);
+        losers.push({ name, payment, rawScore, reasons });
       }
     }
     this.scores[winnerName] += winnerTotal;
+
+    this.breakdown = { lines, losers, winnerTotal };
+    return this.breakdown;
   }
 
   win(player, kong = false) {
@@ -1270,6 +1319,7 @@ export default class Schema {
       position, reveal: this.tiles, kong, allClear, allFromOthers,
       finalDraw: this.finalDraw,
       scores: this.scores,
+      breakdown: this.breakdown,
     });
   }
 
