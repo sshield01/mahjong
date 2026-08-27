@@ -70,10 +70,17 @@
     }
   }
 
-  // Two or more wildcards in hand makes a regular 胡 unlikely; warn before a
-  // player melds one away (杠) or declares on that shape. Only while the hand is
-  // still concealed -- once a meld is down the choice is made and the prompt
-  // would just nag on every later action. (Mirrors the same guard in Tiles.svelte.)
+  // Two or more wildcards in hand and a regular 胡 needs the hand to stay
+  // concealed, be all one suit, or have the wildcards declared. Konging spends
+  // the concealment, so a player can quietly close off the win they were holding.
+  // Warn before that -- but only while the hand still is concealed: once a meld
+  // is down the choice has been made and the prompt would just nag.
+  //
+  // Not on 胡. The declare button only renders when `canDeclare` is true, and
+  // that is `winningHand` already agreeing this is a win -- and `winningHand`
+  // applies the two-wildcard rule itself. So a 胡 on screen is a win the server
+  // will accept, and warning that the hand may be spoiled while the player is in
+  // the act of winning with it is nonsense. (Same reasoning as Tiles.svelte.)
   function confirmWildcards() {
     if (!myWind || !$store || !$store.wildcard) return true;
     if ($store[myWind].down.length > 0) return true;
@@ -94,7 +101,6 @@
   }
 
   async function win() {
-    if (!(await confirmWildcards())) return;
     try {
       await socket.send('declare');
     } catch (error) {
