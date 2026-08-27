@@ -16,8 +16,17 @@ const TURN_ORDER = ["Ton", "Nan", "Shaa", "Pei"];
 // the hand's breakdown for display, and when it decided the dealer by the Ton
 // chair instead it showed an undoubled base beside a running total that had been
 // doubled -- for every table where nobody happened to sit at 东.
+// A seat reserved mid-hand is skipped. It holds no tiles, takes no turn and is
+// scored by nobody, so it cannot be the dealer of a hand it is not in -- and
+// since the search runs in turn order, a spectator taking the empty 东 chair
+// would otherwise become dealer of a game already under way. The damage from
+// that is not subtle: 黄庄 hands the default win to the newcomer and charges
+// every real player two for it, and the dealer's own doubling goes to a seat
+// that never appears in the payment loop, so it vanishes.
 export function dealerSeat(schema) {
-  return TURN_ORDER.find((position) => schema[position]);
+  return TURN_ORDER.find(
+    (position) => schema[position] && !schema[position].waiting,
+  );
 }
 
 // The tail of the wall nobody draws from in normal play -- it is what a kong

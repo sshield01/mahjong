@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import Schema, { player } from "../lib/schema.js";
+import Schema, { player, dealerSeat } from "../lib/schema.js";
 import { allWindTiles } from "./helpers.js";
 
 function seat(schema, position, name) {
@@ -94,6 +94,63 @@ describe("starting a game", () => {
     assert.equal(schema.Shaa.up.length, 13);
     assert.equal(schema.Pei, undefined);
     assert.ok(schema.wildcard, "a wildcard is chosen from the indicator");
+  });
+});
+
+describe("who is the dealer", () => {
+  // 庄家 is the first occupied seat in turn order, and the search starts at 东 --
+  // so a spectator reserving that empty chair mid-hand walked straight into being
+  // dealer of a game they are not playing.
+  // An all-wind deck and a wildcard nobody can hold, so both tables below score
+  // identically whatever the dice did -- the only difference between them is the
+  // reserved chair.
+  function twoPlayerTable({ lateArrival = false } = {}) {
+    const schema = new Schema({ name: "r", tiles: allWindTiles() });
+    seat(schema, "Nan", "Bob");
+    seat(schema, "Shaa", "Cara");
+    schema.start();
+    schema.wildcard = { suit: "dragon", value: "Haku" };
+    if (lateArrival) schema.addPlayer("Late", "Ton"); // the empty 东 chair, mid-hand
+    return schema;
+  }
+
+  const tableWithLateArrival = () => twoPlayerTable({ lateArrival: true });
+
+  test("a chair reserved mid-hand does not take the deal", () => {
+    const schema = tableWithLateArrival();
+    assert.equal(schema.Ton.waiting, true, "the newcomer is only reserving");
+    assert.equal(dealerSeat(schema), "Nan", "the deal stays with the hand being played");
+  });
+
+  test("黄庄 pays the dealer, not the chair reserved mid-hand", () => {
+    const schema = tableWithLateArrival();
+    schema.washOut();
+
+    assert.equal(schema.turn, "Nan", "the dealer takes the default win");
+    assert.equal(schema.scores.Bob, 2, "and collects from the one other player");
+    assert.equal(schema.scores.Cara, -2);
+    assert.equal(
+      schema.scores.Late,
+      undefined,
+      "a seat holding no tiles is neither paid nor charged",
+    );
+  });
+
+  // The dealer's base doubling is read off `dealerSeat` twice -- once for the
+  // winner, once for the loser. Pointed at a reserved chair it matched neither,
+  // since that seat is skipped in the payment loop, so the doubling simply went
+  // missing from every hand played after somebody sat down.
+  test("a mid-hand arrival changes nothing about how the hand scores", () => {
+    const withArrival = tableWithLateArrival();
+    const alone = twoPlayerTable();
+
+    for (const winner of ["Nan", "Shaa"]) {
+      assert.equal(
+        withArrival.computeRoundScore(winner).calcLoserScore(false, false, 0),
+        alone.computeRoundScore(winner).calcLoserScore(false, false, 0),
+        `${winner} winning scores the same either way`,
+      );
+    }
   });
 });
 
