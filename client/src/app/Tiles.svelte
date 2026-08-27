@@ -3,6 +3,7 @@
   import Tile from './Tile.svelte';
   import Schema, { eq, LAST_LAP_NOTICE } from '../lib/schema.js';
   import context from '../game/context.js';
+  import { confirmWildcards } from '../game/wildcards.js';
 
   export let tableAngle;
 
@@ -32,29 +33,11 @@
   let myDiscard;
   $: myDiscard = $store && $store.previousTurn === myWind;
 
-  // Two or more wildcards in hand and a regular 胡 needs the hand to stay
-  // concealed, be all one suit, or have the wildcards declared. Melding (吃/碰/杠)
-  // spends the concealment, so a player can quietly close off the win they were
-  // holding. Warn before that -- but only while the hand still is concealed: once
-  // a meld is down the choice has been made and the prompt would just nag.
-  //
-  // Not on 胡. Every 胡 offered here was built by asking `winningHand` about the
-  // hand the claim actually produces -- the pong and chow ones simulate the meld
-  // first -- and that question already applies the two-wildcard rule. So a 胡 on
-  // screen is a win the server will accept, and warning about a hand being
-  // spoiled while the player is in the act of winning with it is nonsense. It
-  // fired most often on exactly the hands that were fine: a concealed 门清 win,
-  // or a 七对, which the scoring skips the wildcard rule for outright.
-  function confirmWildcards() {
-    const storeValue = $store;
-    if (!myWind || !storeValue || !storeValue.wildcard) return true;
-    if (storeValue[myWind].down.length > 0) return true;
-    const wildcards = storeValue[myWind].up.filter(
-      (t) => eq(storeValue.tiles[t], storeValue.wildcard),
-    ).length;
-    if (wildcards < 2) return true;
-    return confirm('确定吗？手中有两张或以上百搭，可能无法胡正常牌型。');
-  }
+  // 吃, 碰 and 杠 spend the concealment a regular 胡 depends on when two or more
+  // wildcards are in hand; the rule and its prompt live in game/wildcards.js. The
+  // 胡 offers below deliberately do not ask, since each one exists only because
+  // `winningHand` already accepted the hand the claim produces.
+  const warnBeforeMelding = () => confirmWildcards(confirm, $store, myWind);
 
   let toDraw = -1;
   $: {
@@ -173,7 +156,7 @@
           tiles: exactMatches,
           label: '杠',
           async handler() {
-            if (!(await confirmWildcards())) return;
+            if (!(await warnBeforeMelding())) return;
             try {
               await socket.send('kong', { mode: 'exposed' });
               selection.set(new Set);
@@ -190,7 +173,7 @@
           tiles,
           label: '碰',
           async handler() {
-            if (!(await confirmWildcards())) return;
+            if (!(await warnBeforeMelding())) return;
             try {
               await socket.send('pong');
               selection.set(new Set);
@@ -230,7 +213,7 @@
           tiles,
           label: '吃',
           async handler() {
-            if (!(await confirmWildcards())) return;
+            if (!(await warnBeforeMelding())) return;
             try {
               await socket.send('chow', { tiles });
               selection.set(new Set);

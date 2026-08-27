@@ -2,6 +2,7 @@
   import TextTile from './TextTile.svelte';
   import Schema, { eq } from '../../lib/schema.js';
   import context from '../../game/context.js';
+  import { confirmWildcards } from '../../game/wildcards.js';
 
   const {
     currentVotes,
@@ -70,29 +71,11 @@
     }
   }
 
-  // Two or more wildcards in hand and a regular 胡 needs the hand to stay
-  // concealed, be all one suit, or have the wildcards declared. Konging spends
-  // the concealment, so a player can quietly close off the win they were holding.
-  // Warn before that -- but only while the hand still is concealed: once a meld
-  // is down the choice has been made and the prompt would just nag.
-  //
-  // Not on 胡. The declare button only renders when `canDeclare` is true, and
-  // that is `winningHand` already agreeing this is a win -- and `winningHand`
-  // applies the two-wildcard rule itself. So a 胡 on screen is a win the server
-  // will accept, and warning that the hand may be spoiled while the player is in
-  // the act of winning with it is nonsense. (Same reasoning as Tiles.svelte.)
-  function confirmWildcards() {
-    if (!myWind || !$store || !$store.wildcard) return true;
-    if ($store[myWind].down.length > 0) return true;
-    const wildcards = $store[myWind].up.filter(
-      (t) => eq($store.tiles[t], $store.wildcard),
-    ).length;
-    if (wildcards < 2) return true;
-    return confirm('确定吗？手中有两张或以上百搭，可能无法胡正常牌型。');
-  }
-
   async function kong(mode, tile) {
-    if (!(await confirmWildcards())) return;
+    // 杠 is the action here that spends the concealment a regular 胡 depends on.
+    // 胡 does not warn: `canDeclare` below is `winningHand` already agreeing this
+    // is a win, and that check applies the two-wildcard rule itself.
+    if (!(await confirmWildcards(confirm, $store, myWind))) return;
     try {
       await socket.send('kong', { mode, tile });
     } catch (error) {
