@@ -13,6 +13,7 @@
   import Tiles from './Tiles.svelte';
   import Status from './Status/Status.svelte';
   import handler from '../game/handler.js';
+  import { dealerSeat } from '../lib/schema.js';
   import context, { init } from '../game/context.js';
   import { loadSession, saveSession, clearSession } from '../game/session.js';
 
@@ -248,6 +249,7 @@
     rightLabel={$store && $store.Nan && $store.Nan.name}
     leftLabel={$store && $store.Pei && $store.Pei.name}
     highlightSide={SIDE[$store && $store.turn] || null}
+    dealerSide={$store && $store.started ? SIDE[dealerSeat($store)] || null : null}
     >
     <Tiles {tableAngle} />
   </Table>
