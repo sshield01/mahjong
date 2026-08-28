@@ -36,7 +36,7 @@ import Sou8 from "../tiles/Regular/Sou8.svg";
 import Sou9 from "../tiles/Regular/Sou9.svg";
 import Ton from "../tiles/Regular/Ton.svg";
 
-export default {
+const images = {
   Back,
   Blank,
   Chun,
@@ -75,3 +75,22 @@ export default {
   Sou9,
   Ton,
 };
+
+// Every face is its own file -- thirty-odd of them, the largest around 60 kB --
+// and a tile only asks for one when it is already on screen needing it. So the
+// deal fires a dozen requests at once against a cold cache, and a hand comes up
+// with blank faces that fill in one by one as the files land. It reads as tiles
+// arriving broken and then repairing themselves.
+//
+// Ask for them all as soon as the app loads. That is the lobby, where there is
+// nothing else competing and time to spare before anybody is dealt anything. The
+// requests go through the browser's ordinary cache, so this only ever costs the
+// first load; the `Image` objects are dropped immediately and only the cache
+// entries matter.
+if (typeof Image !== "undefined") {
+  for (const url of Object.values(images)) {
+    new Image().src = url;
+  }
+}
+
+export default images;
