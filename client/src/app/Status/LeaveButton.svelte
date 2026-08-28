@@ -52,12 +52,21 @@
     color: white;
   }
 
+  .leave:focus-visible {
+    outline: 2px solid var(--green);
+    outline-offset: 2px;
+  }
+
   /* Coming back is the urgent action once away, so it stops being subtle. */
   .leave.away {
-    background: rgba(173, 220, 145, 0.9);
-    color: #1c3b24;
-    border-color: rgba(173, 220, 145, 1);
+    background: var(--green);
+    color: var(--green-ink);
+    border-color: var(--green);
     font-weight: bold;
+  }
+
+  .leave.away:hover {
+    background: var(--green-hover);
   }
 
   .leave:disabled {

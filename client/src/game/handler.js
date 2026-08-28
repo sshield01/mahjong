@@ -18,6 +18,21 @@ let autoDrawHandle = null;
 // The turn player's held-back draw, kept alongside its handle so the "vote" case
 // can cast it the instant another seat acts -- see the note there.
 let autoDrawFallback = null;
+// Drop the pending auto-draw and its handle together. The two must never drift
+// apart: a live handle with no fallback (or the reverse) is what lets a fired or
+// stale timeout be read as a draw still waiting and cast a second time.
+const clearAutoDraw = () => {
+  window.clearTimeout(autoDrawHandle);
+  autoDrawHandle = null;
+  autoDrawFallback = null;
+};
+
+// A meld or win claim (碰/杠/吃/胡), as opposed to a pass (过), the turn player's
+// own 摸, or the discard that opened the round. Only a real claim needs another
+// seat's held-back draw brought forward; an incoming pass never resolves the
+// round any sooner, so reacting to it would just cut the pacing beat short.
+const isClaimVote = (vote) =>
+  vote && vote.method !== "Ignore" && vote.method !== "Draw" && vote.method !== "Discard";
 
 // Does this seat hold a claim on the tile currently on the table? Exported for
 // the tests: this is what arms the claim clock, and getting it wrong is silent --
@@ -153,11 +168,9 @@ export default async function handler(
       case "discard": {
         window.clearTimeout((get(timer) || {}).handle);
         window.clearTimeout(haClaimsHandle);
-        window.clearTimeout(autoDrawHandle);
+        clearAutoDraw();
         haClaimsHandle = null;
         haClaimsFallback = null;
-        autoDrawHandle = null;
-        autoDrawFallback = null;
         timer.set(null);
         const { position, tile, reveal, hasClaims } = message.body;
         currentVotes.set({ [position]: { method: "Discard", priority: 0 } });
@@ -211,8 +224,7 @@ export default async function handler(
             // takes that as a draw still waiting and casts it a second time.
             autoDrawFallback = fallback;
             autoDrawHandle = window.setTimeout(() => {
-              autoDrawHandle = null;
-              autoDrawFallback = null;
+              clearAutoDraw();
               fallback();
             }, AUTO_DRAW_DELAY);
           } else if (iHaveClaim) {
@@ -247,9 +259,7 @@ export default async function handler(
       }
       case "draw": {
         window.clearTimeout((get(timer) || {}).handle);
-        window.clearTimeout(autoDrawHandle);
-        autoDrawHandle = null;
-        autoDrawFallback = null;
+        clearAutoDraw();
         selectionSets.set([]);
         selection.set(new Set());
         timer.set(null);
@@ -333,15 +343,17 @@ export default async function handler(
         // and it pre-empts nobody -- Draw is the lowest priority at resolution. But
         // a round only resolves once *every* seat has voted, and a 碰/杠 is not a
         // win, so it cannot resolve the round on its own: it sits waiting on the
-        // turn player's still-pending draw. Somebody just voted, so bring that draw
-        // forward now instead of stalling out the delay (or, if the turn player
+        // turn player's still-pending draw. A real claim just landed, so bring that
+        // draw forward now instead of stalling out the delay (or, if the turn player
         // held a claim so no auto-draw was armed, until they manually drew) -- which
         // is what made a pressed 碰/杠 do nothing until the next player drew.
-        if (autoDrawHandle) {
-          window.clearTimeout(autoDrawHandle);
+        //
+        // Only for a claim, though. A bystander's auto-过 arrives here too, and it
+        // never resolves the round any sooner -- reacting to it would just cut the
+        // pacing beat short in the ordinary flow where nobody claims at all.
+        if (isClaimVote(vote) && autoDrawHandle) {
           const pendingDraw = autoDrawFallback;
-          autoDrawHandle = null;
-          autoDrawFallback = null;
+          clearAutoDraw();
           if (pendingDraw) pendingDraw();
         }
         break;

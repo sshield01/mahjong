@@ -49,10 +49,10 @@
   }
 
   .positive {
-    color: #4caf50;
+    color: var(--score-positive);
   }
 
   .negative {
-    color: #f44336;
+    color: var(--score-negative);
   }
 </style>

@@ -53,6 +53,24 @@
     font-size: clamp(14pt, 4vw, 16pt);
     color: white;
     cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+
+  /* Enabled it is the primary action of the lobby, so it earns the accent on
+     hover rather than the dark pill it wears at rest -- and press feedback it
+     had none of before. */
+  .button:not(:disabled):hover {
+    background: rgba(45, 85, 55, 0.9);
+    border-color: var(--green);
+  }
+
+  .button:not(:disabled):active {
+    transform: translateX(-50%) translateY(1px);
+  }
+
+  .button:focus-visible {
+    outline: 2px solid var(--green);
+    outline-offset: 2px;
   }
 
   .button:disabled {

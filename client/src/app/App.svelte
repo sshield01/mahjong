@@ -342,9 +342,18 @@
   font-size: clamp(12pt, 3.5vw, 14pt);
 
   font-family: var(--font-english);
+  /* Press feedback to match the room rows, which already brighten on hover --
+     this is the entry-point CTA (新建房间 / 重试) and had none. */
+  transition: background 0.15s, transform 0.05s;
 }
 
+.button:hover { background: rgba(255, 255, 255, 0.25); }
+.button:active { transform: translateY(1px); }
+.button:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
 .button:disabled { opacity: 0.5 }
+.button:disabled:hover { background: rgba(255, 255, 255, 0.15); }
+
+.room:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
 
 .error, .info {
   padding: 16px 0;

@@ -130,7 +130,7 @@
     position: fixed;
     left: 50%;
     top: 50%;
-	transform: translate(-50%, -50%);
+    transform: translate(-50%, -50%);
     width: min(90vw, 800px);
     max-height: 80vh;  
     background: rgba(0, 0, 0, 0.65);
@@ -273,11 +273,11 @@
   }
 
   .positive {
-    color: #4caf50;
+    color: var(--score-positive);
   }
 
   .negative {
-    color: #f44336;
+    color: var(--score-negative);
   }
 
   .cumulative {
@@ -333,11 +333,11 @@
   }
 
   .player-score.positive {
-    color: #4caf50;
+    color: var(--score-positive);
   }
 
   .player-score.negative {
-    color: #f44336;
+    color: var(--score-negative);
   }
 
   .play-again {
@@ -354,10 +354,11 @@
     letter-spacing: 3px;
 
     /* Was translucent white, which the bright tiles showing through the panel
-       washed out until the primary action was hard to see at all. Solid, with
-       dark text, so it reads against whatever is behind the table. */
-    background: rgba(173, 220, 145, 0.96);
-    color: #14301c;
+       washed out until the primary action was hard to see at all. Solid green
+       -- the shared accent -- with dark ink, so it reads against whatever is
+       behind the table and matches every other primary control. */
+    background: var(--green);
+    color: var(--green-ink);
     border: none;
     padding: clamp(12px, 2.4vh, 18px);
     cursor: pointer;
@@ -367,10 +368,15 @@
   }
 
   .play-again:hover {
-    background: rgb(198, 235, 175);
+    background: var(--green-hover);
   }
 
   .play-again:active {
-    background: rgb(146, 196, 116);
+    background: var(--green-active);
+  }
+
+  .play-again:focus-visible {
+    outline: 2px solid white;
+    outline-offset: -4px;
   }
 </style>

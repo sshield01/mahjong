@@ -73,12 +73,12 @@
 {/if}
 
 {#if pending}
-  <div class="backdrop" on:click={close}></div>
-  <div class="prompt">
-    <div class="prompt-title">坐 {CHARACTER[pending]} 位</div>
-    <div class="prompt-body">本局已开始，下一局入座</div>
+  <div class="mj-backdrop" on:click={close}></div>
+  <div class="mj-card">
+    <div class="mj-title">坐 {CHARACTER[pending]} 位</div>
+    <div class="mj-note">本局已开始，下一局入座</div>
     <input
-      class="prompt-input"
+      class="mj-input"
       placeholder="你的名字"
       maxlength="20"
       bind:value={nameInput}
@@ -86,11 +86,11 @@
       autofocus
     />
     {#if error}
-      <div class="prompt-error">{error}</div>
+      <div class="mj-error">{error}</div>
     {/if}
-    <div class="prompt-buttons">
-      <button class="prompt-button" on:click={close}>取消</button>
-      <button class="prompt-button primary" disabled={!nameInput.trim() || sitting} on:click={sit}>
+    <div class="mj-buttons">
+      <button class="mj-btn" on:click={close}>取消</button>
+      <button class="mj-btn mj-btn--primary" disabled={!nameInput.trim() || sitting} on:click={sit}>
         坐下
       </button>
     </div>
@@ -123,8 +123,11 @@
     font-size: clamp(11pt, 3vw, 14pt);
   }
 
+  /* Shared with the 断线 banner's chip in ReclaimSeat -- same element, so the
+     same look. Chinese font here since it shows a wind character; ReclaimSeat
+     shows a name and switches to the Latin face, which is the only difference. */
   .seat {
-    border: 1px solid rgba(173, 220, 145, 0.6);
+    border: 1px solid var(--green);
     border-radius: 16px;
     background: rgba(255, 255, 255, 0.16);
     color: white;
@@ -133,101 +136,15 @@
     font-size: clamp(11pt, 3vw, 14pt);
     padding: 5px 14px;
     cursor: pointer;
+    transition: background 0.15s;
   }
 
   .seat:hover {
     background: rgba(173, 220, 145, 0.35);
   }
 
-  .backdrop {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.55);
-  }
-
-  .prompt {
-    position: fixed;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    display: flex;
-    flex-direction: column;
-    width: min(320px, 80vw);
-    padding: clamp(16px, 4vw, 24px);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    border-radius: 10px;
-    background: rgba(20, 40, 26, 0.97);
-    box-sizing: border-box;
-  }
-
-  .prompt-title {
-    color: white;
-    font-family: var(--font-chinese);
-    font-size: clamp(14pt, 4vw, 18pt);
-    text-align: center;
-    margin-bottom: 6px;
-  }
-
-  .prompt-body {
-    color: rgba(255, 255, 255, 0.7);
-    font-family: var(--font-chinese);
-    font-size: clamp(10pt, 2.8vw, 12pt);
-    text-align: center;
-  }
-
-  .prompt-input {
-    font-size: clamp(14pt, 4vw, 16pt);
-    border: none;
-    background: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-    padding: 10px 0;
-    margin-top: 8px;
-    color: white;
-    font-family: var(--font-english);
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .prompt-input:focus {
-    outline: none;
-    border-bottom-color: rgba(255, 255, 255, 0.8);
-  }
-
-  .prompt-error {
-    color: #ffb3b3;
-    font-family: var(--font-english);
-    font-size: clamp(10pt, 3vw, 12pt);
-    padding-top: 10px;
-  }
-
-  .prompt-buttons {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    margin-top: 18px;
-  }
-
-  .prompt-button {
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.12);
-    color: white;
-    font-family: var(--font-chinese);
-    font-size: clamp(12pt, 3.5vw, 14pt);
-    padding: 8px 18px;
-    cursor: pointer;
-  }
-
-  .prompt-button.primary {
-    background: rgba(255, 255, 255, 0.9);
-    color: #1c3b24;
-  }
-
-  .prompt-button:disabled {
-    opacity: 0.5;
-    cursor: default;
+  .seat:focus-visible {
+    outline: 2px solid var(--green);
+    outline-offset: 2px;
   }
 </style>

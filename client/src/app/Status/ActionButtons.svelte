@@ -142,13 +142,13 @@
     {/if}
     
     {#each actions as action}
-      <button class="action" on:click={action.handler}>
+      <button class="action" class:win={action.win} on:click={action.handler}>
         {action.label}
       </button>
     {/each}
 
     {#if canDeclare}
-      <button class="action" on:click={win}>
+      <button class="action win" on:click={win}>
         胡
       </button>
     {/if}
@@ -200,19 +200,45 @@
     pointer-events: auto;
   }
 
+  /* The most-pressed control in the game, and the least finished until now: it
+     carried no font (so 碰/杠/吃 fell back to sans while the rest of the app is
+     brush-face Long Cang), no press feedback, and a `border:` line with no width
+     or style keyword that rendered nothing at all. */
   .action {
-    background-color: rgb(255, 255, 255);
-    border: rgba(255, 255, 255, 0.75);
+    background-color: rgba(255, 255, 255, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.75);
     border-radius: 6px;
     padding: clamp(6px, 1.5vh, 8px) clamp(10px, 2vw, 16px);
     margin: clamp(2px, 0.5vh, 6px);
     pointer-events: auto;
+    color: #1a1a1a;
+    font-family: var(--font-chinese);
     font-size: clamp(14pt, 3.5vw, 18pt);
     cursor: pointer;
+    transition: background-color 0.15s, transform 0.05s, box-shadow 0.15s;
 
     display: flex;
     align-items: center;
     justify-content: center;
     white-space: nowrap;
   }
+
+  .action:hover { background-color: #ffffff; }
+  .action:active { transform: translateY(1px); }
+  .action:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+
+  /* 胡 -- the win -- is the one action worth singling out of an otherwise even
+     column. It wears the same confirm-green as 再来一局 and the primary dialog
+     button, so "this is the winning move" reads in the same colour the whole app
+     uses for "yes, this one", and a soft glow lifts it off the white siblings. */
+  .action.win {
+    background-color: var(--green);
+    border-color: var(--green);
+    color: var(--green-ink);
+    font-weight: bold;
+    box-shadow: 0 0 10px rgba(173, 220, 145, 0.7);
+  }
+
+  .action.win:hover { background-color: var(--green-hover); }
+  .action.win:active { background-color: var(--green-active); }
 </style>

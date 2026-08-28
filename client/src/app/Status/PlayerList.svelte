@@ -124,6 +124,19 @@
     if (event.key === 'Enter') sit();
     else if (event.key === 'Escape') closePrompt();
   }
+
+  // The one predicate behind both the click and its keyboard twin, so a seat you
+  // can tap open you can also reach by Tab and open with Enter/Space.
+  $: canOpen = (position) =>
+    (canPick && !$store[position]) || canReclaim(position) || (isHost && canManage(position));
+
+  function onSeatKey(event, position) {
+    if (!canOpen(position)) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openSeat(position);
+    }
+  }
 </script>
 
 <!-- `order` arrives as [across, right, left, near] relative to the viewer, so the
@@ -133,8 +146,11 @@
     <div
       class="seat {['across', 'right', 'left', 'near'][i]}
              {$store[position] ? 'taken' : 'empty'}
-             {(canPick && !$store[position]) || canReclaim(position) || (isHost && canManage(position)) ? 'open' : ''}"
-      on:click={() => ((canPick && !$store[position]) || canReclaim(position) || (isHost && canManage(position))) && openSeat(position)}
+             {canOpen(position) ? 'open' : ''}"
+      role={canOpen(position) ? 'button' : undefined}
+      tabindex={canOpen(position) ? 0 : undefined}
+      on:click={() => canOpen(position) && openSeat(position)}
+      on:keydown={(e) => onSeatKey(e, position)}
     >
       <span class="wind">{CHARACTER[position]}</span>
       {#if $store[position]}
@@ -175,11 +191,11 @@
 {/if}
 
 {#if pending}
-  <div class="prompt-backdrop" on:click={closePrompt}></div>
-  <div class="prompt">
-    <div class="prompt-title">坐 {CHARACTER[pending]} 位</div>
+  <div class="mj-backdrop" on:click={closePrompt}></div>
+  <div class="mj-card">
+    <div class="mj-title">坐 {CHARACTER[pending]} 位</div>
     <input
-      class="prompt-input"
+      class="mj-input"
       placeholder="你的名字"
       maxlength="20"
       bind:value={nameInput}
@@ -187,11 +203,11 @@
       autofocus
     />
     {#if seatError}
-      <div class="prompt-error">{seatError}</div>
+      <div class="mj-error">{seatError}</div>
     {/if}
-    <div class="prompt-buttons">
-      <button class="prompt-button" on:click={closePrompt}>取消</button>
-      <button class="prompt-button primary" disabled={!nameInput.trim() || sitting} on:click={sit}>
+    <div class="mj-buttons">
+      <button class="mj-btn" on:click={closePrompt}>取消</button>
+      <button class="mj-btn mj-btn--primary" disabled={!nameInput.trim() || sitting} on:click={sit}>
         坐下
       </button>
     </div>
@@ -199,20 +215,20 @@
 {/if}
 
 {#if managing}
-  <div class="prompt-backdrop" on:click={closeManage}></div>
-  <div class="prompt">
-    <div class="prompt-title">{CHARACTER[managing]} 位 · {$store[managing].name}</div>
-    <div class="prompt-body">这位玩家已断线</div>
+  <div class="mj-backdrop" on:click={closeManage}></div>
+  <div class="mj-card">
+    <div class="mj-title">{CHARACTER[managing]} 位 · {$store[managing].name}</div>
+    <div class="mj-body">这位玩家已断线</div>
     {#if manageError}
-      <div class="prompt-error">{manageError}</div>
+      <div class="mj-error">{manageError}</div>
     {/if}
-    <div class="prompt-buttons">
-      <button class="prompt-button" on:click={closeManage}>取消</button>
+    <div class="mj-buttons">
+      <button class="mj-btn" on:click={closeManage}>取消</button>
       {#if isHost}
-        <button class="prompt-button danger" on:click={kick}>移出</button>
+        <button class="mj-btn mj-btn--danger" on:click={kick}>移出</button>
       {/if}
       {#if canReclaim(managing)}
-        <button class="prompt-button primary" on:click={reclaim}>我是本人</button>
+        <button class="mj-btn mj-btn--primary" on:click={reclaim}>我是本人</button>
       {/if}
     </div>
   </div>
@@ -263,8 +279,13 @@
   }
 
   .seat.open:hover {
-    border-color: rgba(173, 220, 145, 1);
+    border-color: var(--green);
     background: rgba(45, 85, 55, 0.9);
+  }
+
+  .seat.open:focus-visible {
+    outline: 2px solid var(--green);
+    outline-offset: 2px;
   }
 
   .wind {
@@ -348,100 +369,6 @@
     pointer-events: none;
   }
 
-  .prompt-backdrop {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.55);
-  }
-
-  .prompt {
-    position: fixed;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    display: flex;
-    flex-direction: column;
-    width: min(320px, 80vw);
-    padding: clamp(16px, 4vw, 24px);
-    border: 1px solid rgba(255, 255, 255, 0.25);
-    border-radius: 10px;
-    background: rgba(20, 40, 26, 0.97);
-    box-sizing: border-box;
-  }
-
-  .prompt-title {
-    color: white;
-    font-family: var(--font-chinese);
-    font-size: clamp(14pt, 4vw, 18pt);
-    margin-bottom: 12px;
-    text-align: center;
-  }
-
-  .prompt-input {
-    font-size: clamp(14pt, 4vw, 16pt);
-    border: none;
-    background: none;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.3);
-    padding: 10px 0;
-    color: white;
-    font-family: var(--font-english);
-    width: 100%;
-    box-sizing: border-box;
-  }
-
-  .prompt-input:focus {
-    outline: none;
-    border-bottom-color: rgba(255, 255, 255, 0.8);
-  }
-
-  .prompt-error {
-    color: #ffb3b3;
-    font-family: var(--font-english);
-    font-size: clamp(10pt, 3vw, 12pt);
-    padding-top: 10px;
-  }
-
-  .prompt-buttons {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    margin-top: 18px;
-  }
-
-  .prompt-button {
-    border: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 6px;
-    background: rgba(255, 255, 255, 0.12);
-    color: white;
-    font-family: var(--font-chinese);
-    font-size: clamp(12pt, 3.5vw, 14pt);
-    padding: 8px 18px;
-    cursor: pointer;
-  }
-
-  .prompt-button.primary {
-    background: rgba(255, 255, 255, 0.9);
-    color: #1c3b24;
-  }
-
-  .prompt-button.danger {
-    border-color: rgba(255, 140, 140, 0.6);
-    color: #ffb3b3;
-  }
-
-  .prompt-body {
-    color: rgba(255, 255, 255, 0.85);
-    font-family: var(--font-chinese);
-    font-size: clamp(11pt, 3vw, 14pt);
-    text-align: center;
-    padding-top: 6px;
-  }
-
-  .prompt-button:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
+  /* The name and manage/kick prompts now use the shared .mj-* modal shell from
+     index.html, so this file no longer carries its own copy of the card CSS. */
 </style>

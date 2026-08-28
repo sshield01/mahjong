@@ -40,10 +40,13 @@
     gap: 4px;
   }
 
+  /* Long Cang is a brush face with no real bold weight, so `font-weight: bold`
+     only asks the browser to synthesise one, smearing the strokes. Dropped, in
+     line with every other heading on this font. Sized in pt to match them too,
+     rather than the px this label alone had used. */
   .label {
-    font-size: clamp(12px, 3vw, 18px);
+    font-size: clamp(12pt, 3vw, 15pt);
     color: white;
-    font-weight: bold;
     font-family: var(--font-chinese);
   }
 

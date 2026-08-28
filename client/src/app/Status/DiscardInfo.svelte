@@ -32,12 +32,27 @@
   function claim() {
     if (claimable) $discardAction();
   }
+
+  // Keyboard parity with the mouse: a claim you can click, you can also reach by
+  // Tab and take with Enter/Space -- matching the dialog prompts, which already
+  // answer to the keyboard.
+  function onKey(event) {
+    if (!claimable) return;
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      $discardAction();
+    }
+  }
 </script>
 
 <div
   class="tile {claimable ? 'claimable' : ''}"
   {style}
+  role="button"
+  tabindex={claimable ? 0 : -1}
+  aria-label="认领打出的牌"
   on:click={claim}
+  on:keydown={onKey}
 />
 
 <style>
@@ -70,7 +85,9 @@
     box-shadow: 0 0 0 2px rgba(140, 200, 232, 0.9), 0 0 12px rgba(140, 200, 232, 0.7);
   }
 
-  .tile.claimable:hover {
+  .tile.claimable:hover,
+  .tile.claimable:focus-visible {
+    outline: none;
     box-shadow: 0 0 0 2px rgba(173, 220, 145, 0.95), 0 0 16px rgba(173, 220, 145, 0.85);
   }
 </style>
