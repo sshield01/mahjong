@@ -777,6 +777,39 @@ describe("scoring", () => {
       }
     });
 
+    // The reasons sit beside a loser's name, so they read from that seat's side.
+    // 自摸 is the winner's doing and was being pinned on every loser instead.
+    test("tells a loser what happened to them, not what the winner did", () => {
+      const selfDrawn = sevenPairsWin(); // `source` is "front" -- a self-draw
+      const { losers } = selfDrawn.updateScores("Ton");
+
+      assert.ok(losers.length > 0, "somebody paid for it");
+      for (const loser of losers) {
+        assert.ok(
+          loser.reasons.includes("被自摸"),
+          "a loser is 被自摸, never 自摸 -- they did not draw it",
+        );
+        assert.ok(!loser.reasons.includes("自摸"), "and not credited with the win");
+      }
+    });
+
+    // Dealing is a standing property of the seat, so it is carried by name and
+    // badged on whichever row is the dealer's -- the dealer may have won or lost.
+    // It used to be a 庄家 entry in the loser's list of causes, alongside 放炮 and
+    // 杠x2, which are things that happened during the hand.
+    test("says who dealt without listing it as a cause", () => {
+      const schema = sevenPairsWin();
+      const { dealer, losers } = schema.updateScores("Ton");
+
+      assert.equal(dealer, "A", "the dealer is named");
+      for (const loser of losers) {
+        assert.ok(
+          !loser.reasons.includes("庄家"),
+          "and not repeated among the reasons a loser paid",
+        );
+      }
+    });
+
     test("names the hand's bonuses", () => {
       const schema = sevenPairsWin();
       const { lines } = schema.updateScores("Ton");

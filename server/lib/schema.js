@@ -723,7 +723,7 @@ export default class Schema {
     // 黄庄 has no hand to lay out, so there is nothing to itemise. The scoreboard
     // prints its own flat two-a-head summary for this ending; the empty shape is
     // here so `breakdown` is always present once a hand has finished.
-    this.breakdown = { lines: [], losers: [], winnerTotal: total };
+    this.breakdown = { lines: [], losers: [], winnerTotal: total, dealer: winner };
 
     return new Message("win", {
       position,
@@ -1287,16 +1287,27 @@ export default class Schema {
         this.scores[name] -= payment;
         winnerTotal += payment;
 
+        // These sit beside a loser's name, so they are written from that seat's
+        // side. 放炮 already was -- it is what the player who fed the tile did.
+        // 自摸 was not: that is the winner's doing, and every loser pays the same
+        // multiplier for it, so each of them was being labelled with somebody
+        // else's achievement. 被自摸 says what happened to them.
+        //
+        // 庄家 is not here. Dealing is a property of the seat for the whole hand,
+        // not something that happened in it, and the panel badges the dealer's
+        // row -- naming it again in a list of causes says it twice.
         const reasons = [];
-        if (isLoserDealer) reasons.push("庄家");
-        if (isLoserDiscarder) reasons.push(isSelfDraw ? "自摸" : "放炮");
+        if (isLoserDiscarder) reasons.push(isSelfDraw ? "被自摸" : "放炮");
         if (loserKongCount > 0) reasons.push(`杠x${loserKongCount}`);
         losers.push({ name, payment, rawScore, reasons });
       }
     }
     this.scores[winnerName] += winnerTotal;
 
-    this.breakdown = { lines, losers, winnerTotal };
+    // Who was dealing, by name, so the panel can mark that row whichever side of
+    // the result it fell on -- the dealer may have won or lost.
+    const dealer = this[dealerSeat(this)];
+    this.breakdown = { lines, losers, winnerTotal, dealer: dealer && dealer.name };
     return this.breakdown;
   }
 
