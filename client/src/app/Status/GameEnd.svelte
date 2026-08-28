@@ -102,12 +102,12 @@
 
   {#if $store.scores && Object.keys($store.scores).length > 0}
     <div class="cumulative">
-      <div class="cumulative-title">累计积分</div>
+      <span class="cumulative-title">累计积分</span>
       {#each Object.entries($store.scores).sort((a, b) => b[1] - a[1]) as [name, score]}
-        <div class="cumulative-row">
+        <span class="cumulative-entry">
           <span class="player-name">{name}</span>
           <span class="player-score" class:positive={score > 0} class:negative={score < 0}>{score > 0 ? '+' : ''}{score}</span>
-        </div>
+        </span>
       {/each}
     </div>
   {/if}
@@ -229,14 +229,16 @@
     margin: 6px 0;
   }
 
-  /* What this hand did is what the panel is for, so it is the largest thing on
-     it. It used to be the smallest, with the running totals below shouting over
-     the result they were only the sum of. */
+  /* Same size as the 胡 lines above it, which it inherits from `.scores`: the
+     bonuses and the payments they add up to are one account of one hand, and
+     sizing them differently split it in two. It was briefly larger, to outweigh
+     the running totals below -- but those were the thing out of proportion, and
+     they have since been cut down to a single small line, so the result no
+     longer has to shout over anything. */
   .round-results {
     margin-top: 10px;
     padding-top: 8px;
     border-top: 1px solid rgba(255, 255, 255, 0.3);
-    font-size: clamp(16pt, 5vw, 24pt);
   }
 
   /* Same reasoning as the totals further down: Long Cang is a brush face and
@@ -286,25 +288,33 @@
     padding-top: clamp(12px, 2vh, 20px);
     border-top: 1px solid rgba(255, 255, 255, 0.3);
     font-family: var(--font-chinese);
-    /* Standing context, not the news. Kept small so it sits under the hand's own
-       result rather than over it. */
-    font-size: clamp(12pt, 3.5vw, 18pt);
+    /* Standing context, not the news: small, and on a single line under the
+       hand's own result rather than a stacked column competing with it. Wraps
+       rather than overflowing, so a four-player table on a narrow screen folds
+       onto a second line instead of pushing the panel wider. */
+    font-size: clamp(9pt, 2.4vw, 12pt);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: center;
+    gap: clamp(6px, 1.6vw, 14px);
   }
 
   .cumulative-title {
     font-weight: bold;
-    margin-bottom: clamp(8px, 1.5vh, 14px);
-    font-size: clamp(12pt, 3.2vw, 16pt);
     letter-spacing: 2px;
+    /* Leads the line rather than heading a block, so it keeps its own size and
+       gives up the margin it used to sit above. */
+    margin: 0;
   }
 
-  .cumulative-row {
-    display: flex;
-    justify-content: space-between;
+  /* One player: the name and their total kept together, so a wrap can only ever
+     break between players and never between somebody and their score. */
+  .cumulative-entry {
+    display: inline-flex;
     align-items: baseline;
-    margin: clamp(4px, 1vh, 10px) 0;
-    min-width: min(300px, 70vw);
-    gap: clamp(12px, 4vw, 32px);
+    gap: 4px;
+    white-space: nowrap;
   }
 
   /* Long Cang is a brush face -- beautiful for the headings, but it mangles

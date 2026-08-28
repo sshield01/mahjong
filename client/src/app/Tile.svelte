@@ -378,8 +378,13 @@
     will-change: transform;
     pointer-events: none;
 
-    --color-back: #ffad00;
-    --color-side: #e89f05;
+    /* An ordinary tile: blue back and edges, and a face left almost white so the
+       printed faces read against it. Blue is the resting state here, which is
+       what lets every state that wants attention be warm -- see `.clickable`
+       below. The two must not swap round: a table is mostly backs, so the colour
+       a player sees most of has to be the quiet one. */
+    --color-back: #2f6fb0;
+    --color-side: #1d4e80;
     --color-front: #fcfcfc;
     --color-front-front: #fefefe;
   }
@@ -406,11 +411,15 @@
     transform-style: preserve-3d;
   }
 
+  /* Anything the player may act on. Warm, against the blue every resting tile
+     wears, so "you can touch this" is a change of temperature rather than a
+     change of shade -- which survives the low angle the table is seen from far
+     better than two blues would. */
   .clickable {
     cursor: pointer;
     pointer-events: auto;
-    --color-back: #8dc8e8;
-    --color-side: #5c9eed;
+    --color-back: #f0a04b;
+    --color-side: #d4791f;
     --color-front: #f5f1c4;
     --color-front-front: #f5f1c4;
   }
@@ -502,11 +511,19 @@
      draws before the round starts, so the end of the hand can be seen coming.
      `.clickable` sets its own colours on the faces themselves, so the tile you
      can actually draw still reads blue once the round arrives. */
+  /* The tiles the 海底 round will be dealt from. Deep yellow: visible from across
+     the table without reading as an action -- these are not touchable, they are
+     a warning that the hand is nearly over.
+
+     Deep rather than bright, which separates it from both neighbours by
+     brightness instead of hue: the wildcard's gold below is lighter, and the
+     warm actions are lighter still. A pale yellow sat between the two and
+     belonged to neither. */
   .tile.final {
-    --color-back: #c0392b;
-    --color-side: #96281b;
-    --color-front: #e8a49c;
-    --color-front-front: #e8a49c;
+    --color-back: #d4b106;
+    --color-side: #8f7605;
+    --color-front: #f0dc86;
+    --color-front-front: #f0dc86;
   }
 
   .tile.wildcard {
@@ -542,12 +559,14 @@
 
   /* Colour every face, not just the back. The generic clickable palette leaves the
      four sides near-white -- the same near-white as an ordinary tile -- so from a
-     low angle, where the sides are most of what you see, it looked unchanged. */
+     low angle, where the sides are most of what you see, it looked unchanged.
+     A deeper orange than `.clickable`: this is the single tile you are being
+     invited to take, against a hand of tiles you merely may touch. */
   .tile.drawable .clickable {
-    --color-back: #2b7fd4;
-    --color-side: #17538f;
-    --color-front: #63b3ea;
-    --color-front-front: #63b3ea;
+    --color-back: #e8710a;
+    --color-side: #a8500a;
+    --color-front: #f7a94e;
+    --color-front-front: #f7a94e;
   }
 
 </style>
