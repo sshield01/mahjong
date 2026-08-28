@@ -72,8 +72,14 @@
   .votes {
     pointer-events: none;
     position: fixed;
-    bottom: clamp(8px, 2vh, 32px);
-    right: clamp(8px, 3vw, 32px);
+    /* Stacked above 暂离 and its 暂离中 note, which share this corner. The strip
+       used to appear only while this player held a claim -- brief, and rarely at
+       the same moment as anything else. It now runs for the whole round and
+       lists the seats still to answer, so it is both taller and almost always on
+       screen, and it was landing on the button. The offset clears the button
+       (its own bottom, plus its height) and the note that sits above it. */
+    bottom: calc(clamp(8px, 2vh, 20px) + 84px);
+    right: clamp(8px, 3vw, 10vw);
 
     display: flex;
     flex-direction: column;

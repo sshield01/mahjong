@@ -544,17 +544,12 @@
     --color-front-front: #f2b47a;
   }
 
-  /* 癞子. Gold, and deliberately the only tile marked by something other than
-     colour as well.
-
-     The warm range now carries three meanings -- yellow for "you may act on
-     this", deeper yellow for the tile to draw, orange for the last lap -- and
-     gold sits among them. Most of those never share a space: the last lap is in
-     the wall, the draw tile is in the wall. But a wildcard and a clickable tile
-     sit side by side in your own hand, and telling them apart by hue alone asks
-     something of the eye that not every eye can give. The band across the face
-     says it without colour: a wildcard is the one tile you may not discard, and
-     that is worth being sure of. */
+  /* 癞子. Gold -- and gold alone: a band was tried across the face to mark it by
+     something other than colour, on the argument that a wildcard and a clickable
+     tile sit together in a hand and are told apart by hue only. True, but the
+     face is a printed tile and a bar drawn over it looks like damage. If that
+     pair needs separating, it wants a different colour, not a mark on the
+     artwork. */
   .tile.wildcard {
     --color-back: #ffd700;
     --color-side: #daa520;
@@ -562,16 +557,6 @@
     --color-front-front: #fffacd;
   }
 
-  .tile.wildcard .front::after {
-    content: '';
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 12%;
-    height: 8%;
-    background: rgba(120, 80, 0, 0.75);
-    pointer-events: none;
-  }
 
   /* Growing needs to feel immediate; the 1s default is tuned for tiles sliding
      across the table, which reads as sluggish for a highlight. */
