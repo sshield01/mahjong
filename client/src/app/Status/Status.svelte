@@ -17,13 +17,23 @@
 
   const { store, myName } = context();
 
+  // Where each seat sits on screen for a given viewer, as [across, right, left,
+  // near] -- the viewer themselves always `near`. Every entry is the same ring
+  // read from a different chair: 东 南 西 北 anticlockwise, which is the order
+  // play travels in.
   const ORDER = {
     Ton: ['Shaa', 'Nan', 'Pei', 'Ton'],
     Shaa: ['Ton', 'Pei', 'Nan', 'Shaa'],
     Nan: ['Pei', 'Shaa', 'Ton', 'Nan'],
     Pei: ['Nan', 'Ton', 'Shaa', 'Pei'],
   };
-  const DEFAULT_ORDER = ['Ton', 'Nan', 'Shaa', 'Pei'];
+
+  // Nobody seated yet, so show the table as 东 sees it. This used to be
+  // ['Ton', 'Nan', 'Shaa', 'Pei'] -- turn order pressed into service as a
+  // layout, which they are not: read round the diamond it put 东 南 北 西, with
+  // 西 and 北 swapped, so the seats in the lobby sat in an arrangement no table
+  // has.
+  const DEFAULT_ORDER = ORDER.Ton;
 
   $: mySeat = $store.seatOf($myName);
 </script>
