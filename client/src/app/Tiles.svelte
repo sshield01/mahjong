@@ -416,6 +416,27 @@
     plainDiscards = set;
   }
 
+  // Tiles that have been melded -- anything in anybody's `down`. They get there
+  // by a claim, and a claim is the one move the player has just committed to and
+  // is waiting on: the full one-second glide is tuned for tiles crossing the
+  // table on their own account, and reads as hesitation when it is the answer to
+  // a button you pressed. Tiles already melded never move, so the shorter time
+  // only ever applies to the meld being built.
+  let melded = new Set();
+  $: {
+    const storeValue = $store;
+    const set = new Set();
+    if (storeValue) {
+      for (const wind of ['Ton', 'Nan', 'Shaa', 'Pei']) {
+        if (!storeValue[wind]) continue;
+        for (const meld of storeValue[wind].down) {
+          for (const tile of meld) if (typeof tile === 'number') set.add(tile);
+        }
+      }
+    }
+    melded = set;
+  }
+
   let inWall = new Set();
   $: {
     const storeValue = $store;
@@ -440,6 +461,6 @@
 
 {#if $store}
   {#each $store.tiles as tile, index}
-    <Tile {tableAngle} {tile} {index} clickable={!!handlers[index]} on:click={handlers[index]} selected={$selection.has(index)} final={lastLap.has(index)} inWall={inWall.has(index)} plain={plainDiscards.has(index)} />
+    <Tile {tableAngle} {tile} {index} clickable={!!handlers[index]} on:click={handlers[index]} selected={$selection.has(index)} final={lastLap.has(index)} inWall={inWall.has(index)} plain={plainDiscards.has(index)} melded={melded.has(index)} />
   {/each}
 {/if}

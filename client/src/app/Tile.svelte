@@ -195,6 +195,9 @@
   // Clickable, but not worth colouring: your own hand during your own discard,
   // where every tile is a legal discard. See the `.plain` rule in the styles.
   export let plain = false;
+  // In somebody's melds. Moves there on a claim, which wants a shorter glide --
+  // see the `.tile.melded` rule in the styles.
+  export let melded = false;
   export let tableAngle;
 
   const dispatch = createEventDispatcher();
@@ -359,7 +362,7 @@
 </script>
 
 <div class="selection {selected ? 'selected' : ''} {drawable ? 'drawable' : ''}">
-  <div class="tile {isWildcard ? 'wildcard' : ''} {actionable ? 'actionable' : ''} {drawable ? 'drawable' : ''} {final ? 'final' : ''} {plain ? 'plain' : ''}" style={position}>
+  <div class="tile {isWildcard ? 'wildcard' : ''} {actionable ? 'actionable' : ''} {drawable ? 'drawable' : ''} {final ? 'final' : ''} {plain ? 'plain' : ''} {melded ? 'melded' : ''}" style={position}>
     <div class="top {clickable ? 'clickable' : ''}" on:click={() => clickable && dispatch('click', { tile, index })} />
     <div class="bottom {clickable ? 'clickable' : ''}" on:click={() => clickable && dispatch('click', { tile, index })} />
     <div class="left {clickable ? 'clickable' : ''}" on:click={() => clickable && dispatch('click', { tile, index })} />
@@ -541,6 +544,17 @@
     --color-front-front: #f2b47a;
   }
 
+  /* 癞子. Gold, and deliberately the only tile marked by something other than
+     colour as well.
+
+     The warm range now carries three meanings -- yellow for "you may act on
+     this", deeper yellow for the tile to draw, orange for the last lap -- and
+     gold sits among them. Most of those never share a space: the last lap is in
+     the wall, the draw tile is in the wall. But a wildcard and a clickable tile
+     sit side by side in your own hand, and telling them apart by hue alone asks
+     something of the eye that not every eye can give. The band across the face
+     says it without colour: a wildcard is the one tile you may not discard, and
+     that is worth being sure of. */
   .tile.wildcard {
     --color-back: #ffd700;
     --color-side: #daa520;
@@ -548,10 +562,30 @@
     --color-front-front: #fffacd;
   }
 
+  .tile.wildcard .front::after {
+    content: '';
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 12%;
+    height: 8%;
+    background: rgba(120, 80, 0, 0.75);
+    pointer-events: none;
+  }
+
   /* Growing needs to feel immediate; the 1s default is tuned for tiles sliding
      across the table, which reads as sluggish for a highlight. */
   .tile.actionable {
     transition: transform 0.2s ease-out;
+  }
+
+  /* Same argument, one step along: a meld is the move the player has just
+     committed to and is waiting on. A second of travel between pressing 碰 and
+     seeing it land reads as the button not having worked -- which, for a while,
+     it genuinely had not. Quick enough to feel answered, slow enough to see
+     where the tiles went. */
+  .tile.melded {
+    transition: transform 0.4s ease-out;
   }
 
   /* The next tile to draw, held clear of the wall. The lift goes on the wrapper,
