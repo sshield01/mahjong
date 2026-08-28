@@ -192,6 +192,9 @@
   import images from './images.js';
 
   export let tile, index, clickable = false, selected = false, final = false, inWall = false;
+  // Clickable, but not worth colouring: your own hand during your own discard,
+  // where every tile is a legal discard. See the `.plain` rule in the styles.
+  export let plain = false;
   export let tableAngle;
 
   const dispatch = createEventDispatcher();
@@ -356,7 +359,7 @@
 </script>
 
 <div class="selection {selected ? 'selected' : ''} {drawable ? 'drawable' : ''}">
-  <div class="tile {isWildcard ? 'wildcard' : ''} {actionable ? 'actionable' : ''} {drawable ? 'drawable' : ''} {final ? 'final' : ''}" style={position}>
+  <div class="tile {isWildcard ? 'wildcard' : ''} {actionable ? 'actionable' : ''} {drawable ? 'drawable' : ''} {final ? 'final' : ''} {plain ? 'plain' : ''}" style={position}>
     <div class="top {clickable ? 'clickable' : ''}" on:click={() => clickable && dispatch('click', { tile, index })} />
     <div class="bottom {clickable ? 'clickable' : ''}" on:click={() => clickable && dispatch('click', { tile, index })} />
     <div class="left {clickable ? 'clickable' : ''}" on:click={() => clickable && dispatch('click', { tile, index })} />
@@ -422,6 +425,17 @@
   .clickable {
     cursor: pointer;
     pointer-events: auto;
+  }
+
+  /* The colour is a separate matter from the click. When it is your turn to
+     discard, every tile in your hand is a legal one, so painting them all says
+     nothing you did not already know -- it spends the loudest signal on screen
+     to announce a turn you are already taking. Those tiles stay clickable and
+     keep their pointer; they simply do not light up, and the yellow goes on
+     meaning "here is a particular thing to act on" everywhere it appears.
+     Wildcards in that hand keep their gold, which is the one distinction worth
+     drawing there: they are the tiles you may not discard. */
+  .tile:not(.plain) .clickable {
     --color-back: #f2d43f;
     --color-side: #c2a212;
     --color-front: #f5f1c4;

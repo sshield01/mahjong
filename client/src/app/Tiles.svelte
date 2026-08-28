@@ -400,6 +400,22 @@
   // doing where it explains something: a hand, a meld, a discard. Not there.
   //
   // Walked once here rather than per tile, same as the last lap above.
+  // Your own hand while it is your turn to discard. Every tile in it is clickable
+  // then, so the click marking has nothing to distinguish and only shouts. These
+  // stay clickable; they just do not get painted. Wildcards are left out because
+  // they are not discardable at all -- they keep their own gold, which is the
+  // distinction actually worth drawing at that moment.
+  let plainDiscards = new Set();
+  $: {
+    const storeValue = $store;
+    const set = new Set();
+    if (storeValue && myWind && myTurn && !away && !waiting
+        && typeof storeValue.drawn === 'number') {
+      for (const tile of storeValue[myWind].up) set.add(tile);
+    }
+    plainDiscards = set;
+  }
+
   let inWall = new Set();
   $: {
     const storeValue = $store;
@@ -424,6 +440,6 @@
 
 {#if $store}
   {#each $store.tiles as tile, index}
-    <Tile {tableAngle} {tile} {index} clickable={!!handlers[index]} on:click={handlers[index]} selected={$selection.has(index)} final={lastLap.has(index)} inWall={inWall.has(index)} />
+    <Tile {tableAngle} {tile} {index} clickable={!!handlers[index]} on:click={handlers[index]} selected={$selection.has(index)} final={lastLap.has(index)} inWall={inWall.has(index)} plain={plainDiscards.has(index)} />
   {/each}
 {/if}
