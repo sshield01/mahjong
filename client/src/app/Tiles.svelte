@@ -392,6 +392,28 @@
     }
   }
 
+  // What is still standing in the wall. Only interesting once a hand ends: the
+  // win reveals every tile, including the ones nobody drew, and the wildcard
+  // marking colours a tile's *back* -- so undrawn copies of the wildcard turned
+  // into gold-backed tiles poking out of an otherwise blue wall, pulling the eye
+  // to tiles that had nothing to do with the hand. Marking wildcards is worth
+  // doing where it explains something: a hand, a meld, a discard. Not there.
+  //
+  // Walked once here rather than per tile, same as the last lap above.
+  let inWall = new Set();
+  $: {
+    const storeValue = $store;
+    const wallTiles = new Set();
+    if (storeValue && storeValue.walls) {
+      for (const wall of storeValue.walls) {
+        for (const stack of wall) {
+          for (const tile of stack) wallTiles.add(tile);
+        }
+      }
+    }
+    inWall = wallTiles;
+  }
+
   // Mirror the discard tile's own click handler onto the DiscardInfo indicator, so
   // a claim can be made from the big tile at the top of the screen instead of
   // picking the small one out of the pile. Same handler, so identical behaviour.
@@ -402,6 +424,6 @@
 
 {#if $store}
   {#each $store.tiles as tile, index}
-    <Tile {tableAngle} {tile} {index} clickable={!!handlers[index]} on:click={handlers[index]} selected={$selection.has(index)} final={lastLap.has(index)} />
+    <Tile {tableAngle} {tile} {index} clickable={!!handlers[index]} on:click={handlers[index]} selected={$selection.has(index)} final={lastLap.has(index)} inWall={inWall.has(index)} />
   {/each}
 {/if}

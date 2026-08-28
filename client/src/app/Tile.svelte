@@ -191,7 +191,7 @@
   import { WINDS, eq } from '../lib/schema.js';
   import images from './images.js';
 
-  export let tile, index, clickable = false, selected = false, final = false;
+  export let tile, index, clickable = false, selected = false, final = false, inWall = false;
   export let tableAngle;
 
   const dispatch = createEventDispatcher();
@@ -211,7 +211,11 @@
   };
 
   $: myWind = $store && $store.seatOf($myName);
-  $: isWildcard = tile && $store && $store.wildcard && eq(tile, $store.wildcard);
+  // Never on a tile still standing in the wall. During a hand those are face
+  // down and this could not fire anyway, but a win reveals every tile including
+  // the ones nobody drew -- and since the marking colours the back, undrawn
+  // copies of the wildcard came up gold-backed in the middle of a blue wall.
+  $: isWildcard = !inWall && tile && $store && $store.wildcard && eq(tile, $store.wildcard);
 
   function calcPosition(store) {
     if (index === store.indicator) {
@@ -383,8 +387,8 @@
        what lets every state that wants attention be warm -- see `.clickable`
        below. The two must not swap round: a table is mostly backs, so the colour
        a player sees most of has to be the quiet one. */
-    --color-back: #2f6fb0;
-    --color-side: #1d4e80;
+    --color-back: #4a9fe0;
+    --color-side: #2c72ad;
     --color-front: #fcfcfc;
     --color-front-front: #fefefe;
   }
@@ -418,8 +422,8 @@
   .clickable {
     cursor: pointer;
     pointer-events: auto;
-    --color-back: #f0a04b;
-    --color-side: #d4791f;
+    --color-back: #f2d43f;
+    --color-side: #c2a212;
     --color-front: #f5f1c4;
     --color-front-front: #f5f1c4;
   }
@@ -511,19 +515,16 @@
      draws before the round starts, so the end of the hand can be seen coming.
      `.clickable` sets its own colours on the faces themselves, so the tile you
      can actually draw still reads blue once the round arrives. */
-  /* The tiles the 海底 round will be dealt from. Deep yellow: visible from across
-     the table without reading as an action -- these are not touchable, they are
-     a warning that the hand is nearly over.
-
-     Deep rather than bright, which separates it from both neighbours by
-     brightness instead of hue: the wildcard's gold below is lighter, and the
-     warm actions are lighter still. A pale yellow sat between the two and
-     belonged to neither. */
+  /* The tiles the 海底 round will be dealt from. Orange: visible from across the
+     table, and far enough from the yellows that carry "you may touch this" that
+     it cannot be mistaken for one. These are not actionable at all -- they are a
+     warning that the hand is nearly over, standing in the wall where nothing is
+     touchable anyway. */
   .tile.final {
-    --color-back: #d4b106;
-    --color-side: #8f7605;
-    --color-front: #f0dc86;
-    --color-front-front: #f0dc86;
+    --color-back: #e07b28;
+    --color-side: #a3541a;
+    --color-front: #f2b47a;
+    --color-front-front: #f2b47a;
   }
 
   .tile.wildcard {
@@ -560,13 +561,13 @@
   /* Colour every face, not just the back. The generic clickable palette leaves the
      four sides near-white -- the same near-white as an ordinary tile -- so from a
      low angle, where the sides are most of what you see, it looked unchanged.
-     A deeper orange than `.clickable`: this is the single tile you are being
+     A deeper yellow than `.clickable`: this is the single tile you are being
      invited to take, against a hand of tiles you merely may touch. */
   .tile.drawable .clickable {
-    --color-back: #e8710a;
-    --color-side: #a8500a;
-    --color-front: #f7a94e;
-    --color-front-front: #f7a94e;
+    --color-back: #e0b800;
+    --color-side: #9c8000;
+    --color-front: #f5dc5c;
+    --color-front-front: #f5dc5c;
   }
 
 </style>
