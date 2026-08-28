@@ -34,6 +34,27 @@ const clearAutoDraw = () => {
 const isClaimVote = (vote) =>
   vote && vote.method !== "Ignore" && vote.method !== "Draw" && vote.method !== "Discard";
 
+// This seat's own claim clock, kept so it can be given back after 想想.
+//
+// 想想 clears the countdown's handle and leaves it cleared: nothing in the
+// message loop ever restored it, so a seat that pressed it would never answer on
+// its own. That is harmless while the others are still deciding -- but a round
+// resolves only once every seat has answered, so once somebody actually claims,
+// their 碰 sits waiting on the paused seat and looks as though the button did
+// nothing. `wait()` was careful to keep 过 available for exactly this reason;
+// what was missing is that nothing obliges anyone to press it.
+//
+// 想想 asks for a moment to think, not for a hold on the hand. Once a real claim
+// has landed the table is waiting on this seat alone, so the clock comes back --
+// briefly, and visibly, rather than answering for them on the spot.
+const RESUME_AFTER_CLAIM = 3000;
+let claimFallback = null;
+
+const clearClaimClock = (timer) => {
+  window.clearTimeout((get(timer) || {}).handle);
+  claimFallback = null;
+};
+
 // Does this seat hold a claim on the tile currently on the table? Exported for
 // the tests: this is what arms the claim clock, and getting it wrong is silent --
 // a seat with no clock casts its automatic vote and the claim is gone before
@@ -166,7 +187,7 @@ export default async function handler(
         break;
       }
       case "discard": {
-        window.clearTimeout((get(timer) || {}).handle);
+        clearClaimClock(timer);
         window.clearTimeout(haClaimsHandle);
         clearAutoDraw();
         haClaimsHandle = null;
@@ -201,6 +222,11 @@ export default async function handler(
             fallback();
             break;
           }
+
+          // Held for the "vote" case: whichever branch below runs, if a real claim
+          // arrives from another seat while this one still has not answered, this
+          // is what eventually answers for it. See the note there.
+          claimFallback = fallback;
 
           const iHaveClaim = hasActions(schema, myWind);
           if (schema.turn === myWind && iHaveClaim) {
@@ -258,7 +284,7 @@ export default async function handler(
         break;
       }
       case "draw": {
-        window.clearTimeout((get(timer) || {}).handle);
+        clearClaimClock(timer);
         clearAutoDraw();
         selectionSets.set([]);
         selection.set(new Set());
@@ -276,7 +302,7 @@ export default async function handler(
         break;
       }
       case "take": {
-        window.clearTimeout((get(timer) || {}).handle);
+        clearClaimClock(timer);
         selectionSets.set([]);
         selection.set(new Set());
         timer.set(null);
@@ -356,6 +382,42 @@ export default async function handler(
           clearAutoDraw();
           if (pendingDraw) pendingDraw();
         }
+
+        // The other half of the same stall, and the larger half. A round resolves
+        // only once every seat has answered, so a claim that has landed is waiting
+        // on whoever has not -- and two seats can sit there with no clock running
+        // at all, never answering by themselves:
+        //
+        //   - the turn player holding a claim of their own, who is given no clock
+        //     and no auto-vote on purpose, because the table is theirs to take;
+        //   - anyone who pressed 想想, which stops their countdown and nothing
+        //     ever started it again.
+        //
+        // Both are right while the table is still deciding. Neither is right once
+        // somebody has actually claimed: from that moment the round is waiting on
+        // this seat alone, and the other player's 碰 looks as though the button
+        // did nothing -- until the turn player happens to draw, which is what
+        // finally resolves it.
+        //
+        // So: give this seat a clock. Short, and visibly running rather than
+        // silent, so the decision comes due in front of the player instead of
+        // being answered for them.
+        if (isClaimVote(vote) && claimFallback) {
+          const mine = schema.seatOf(socket.name);
+          const clock = get(timer);
+          const idle = !clock || clock.paused;
+          if (mine && idle && !get(currentVotes)[mine]) {
+            const resume = claimFallback;
+            // `clock` is null for the turn player, who was never given one.
+            window.clearTimeout((clock || {}).handle);
+            timer.set({
+              start: Date.now(),
+              paused: false,
+              duration: RESUME_AFTER_CLAIM,
+              handle: window.setTimeout(resume, RESUME_AFTER_CLAIM),
+            });
+          }
+        }
         break;
       }
       case "exposeWildcard": {
@@ -367,7 +429,7 @@ export default async function handler(
         break;
       }
       case "win": {
-        window.clearTimeout((get(timer) || {}).handle);
+        clearClaimClock(timer);
         selectionSets.set([]);
         selection.set(new Set());
         timer.set(null);

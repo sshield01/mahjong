@@ -106,6 +106,17 @@
   // round waits on their vote forever.
   $: canVote = $timer && myWind && !$currentVotes[myWind];
 
+  // Has another seat already claimed this discard? Once one has, the round is
+  // waiting on this seat alone, and 想想 stops this seat's clock with nothing
+  // left to start it again -- the claimer's 碰 would then sit there looking
+  // broken until the turn player happened to draw. Thinking time is for while
+  // the table is still deciding; after a claim has landed, answer or pass.
+  $: someoneElseClaimed = Object.entries($currentVotes).some(
+    ([position, vote]) =>
+      position !== myWind && vote &&
+      vote.method !== 'Discard' && vote.method !== 'Ignore' && vote.method !== 'Draw',
+  );
+
   // Melds you build on your own turn, off the tile you just drew.
   $: canMeld = $store && $store.drawn !== undefined && $store.turn === myWind;
 
@@ -131,7 +142,7 @@
 <div class="container">
   <div class="actions" class:live={hasButtons}>
     {#if canVote}
-      {#if !$timer.paused}
+      {#if !$timer.paused && !someoneElseClaimed}
         <button class="action" on:click={wait}>
           想想
         </button>
