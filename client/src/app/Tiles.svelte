@@ -122,6 +122,27 @@
 
   let selecting = false;
 
+  // Put one offer up for confirmation, without ever passing. The tile in the pile
+  // toggles -- click again to decline -- but the big indicator only ever does
+  // this, because there its second click would be destructive with no local sign
+  // that a first had registered. Shared so the two cannot drift.
+  //
+  // Always leave something selected: the buttons only render for a selection
+  // matching an offer exactly, so selecting nothing shows nothing, and two chows
+  // on one discard share no tiles to fall back on. A win is the pick when one is
+  // going; otherwise the first, and clicking your own tiles moves it to any of
+  // the others.
+  function selectFromDiscard() {
+    // Stop the clock running down while the player reads the options -- but keep
+    // the timer value, so it is a pause rather than a reset.
+    const { handle } = get(timer) || {};
+    if (handle) window.clearTimeout(handle);
+
+    const preferred = $selectionSets.find(set => set.win) || $selectionSets[0];
+    if (preferred) selection.set(new Set(preferred.tiles));
+    selecting = true;
+  }
+
   // A new tile on the table is a new decision, so the half-made one before it is
   // abandoned.
   //
@@ -368,29 +389,7 @@
                     selecting = !selecting;
                     await socket.send(myTurn ? 'draw' : 'ignore');
                   } else {
-                    // Clear the timeout so we don't get penalized for slow clicking, but let's leave the timer value so it
-                    // doesn't get reset
-                    const { handle } = get(timer) || {};
-                    if (handle) {
-                      window.clearTimeout(handle);
-                    }
-                    // Always leave one action selected, so a button appears. The
-                    // buttons only render for a selection that matches a set
-                    // exactly, so selecting nothing shows nothing -- and two
-                    // chows on the same discard use different tiles, so there
-                    // was no shared combination to fall back on. The click did
-                    // nothing visible, and on your own turn there is no clock
-                    // and no 过 either: with the other seats away, that stopped
-                    // the table dead.
-                    //
-                    // A win is the pick when one is on offer; otherwise the
-                    // first, and clicking your own tiles moves the selection to
-                    // any of the others.
-                    const preferred = $selectionSets.find(set => set.win) || $selectionSets[0];
-                    if (preferred) {
-                      selection.set(new Set(preferred.tiles));
-                    }
-                    selecting = !selecting;
+                    selectFromDiscard();
                   }
                 } catch (error) {
                   console.error(error);
@@ -478,11 +477,28 @@
     inWall = wallTiles;
   }
 
-  // Mirror the discard tile's own click handler onto the DiscardInfo indicator, so
-  // a claim can be made from the big tile at the top of the screen instead of
-  // picking the small one out of the pile. Same handler, so identical behaviour.
+  // The DiscardInfo indicator at the top of the screen, so a claim can be made
+  // from the big tile instead of picking the small one out of the pile.
+  //
+  // It used to share the discard tile's own handler exactly, and that handler is
+  // a two-step when there is more than one claim to choose between: the first
+  // click selects, the second passes. On the tile in the pile that reads fine --
+  // the selection lights up in your hand, right beside it, and clicking the same
+  // tile again to say "no thanks" is a reasonable thing to mean.
+  //
+  // From the big tile it is a trap. The only feedback for the first click
+  // happens at the other end of the screen, so the button appears to have done
+  // nothing; you click it again, and the second click throws the claim away and
+  // draws. Someone lost a 碰 to exactly that.
+  //
+  // So this one only ever selects. Passing is still one press away on 过, which
+  // says what it does.
   $: $discardAction = ($store && !$store.completed && $store.discarded !== undefined && handlers)
-    ? (handlers[$store.discarded] || null)
+    ? (
+        $selectionSets.length === 1
+          ? handlers[$store.discarded] || null
+          : ($selectionSets.length > 1 ? selectFromDiscard : null)
+      )
     : null;
 </script>
 
