@@ -7,7 +7,7 @@
 
   export let tableAngle;
 
-  const { selection, selectionSets, socket, store, timer, hasAction, discardAction, myName, absent, confirm } = context();
+  const { selection, selectionSets, socket, store, timer, hasAction, discardAction, myName, absent, confirm, currentVotes } = context();
 
   // Stepped away: the server is playing this seat, so the table should not be
   // offering its tiles. Without this an away player's own screen still lit up
@@ -121,11 +121,38 @@
   }
 
   let selecting = false;
+
+  // A new tile on the table is a new decision, so the half-made one before it is
+  // abandoned.
+  //
+  // `selecting` was only ever cleared by acting on an offer or by passing
+  // deliberately. A round that ended without this player doing either -- their
+  // countdown running out, somebody else claiming it, the seat answering on its
+  // own -- left it set. The first click on the *next* discard then took the
+  // second-click path, which passes: you click a tile meaning to 碰 and the table
+  // draws instead. Once wrong, it stayed wrong, since every later round left it
+  // set the same way.
+  let lastDiscard;
+  $: {
+    const discardNow = $store && $store.discarded;
+    if (discardNow !== lastDiscard) {
+      lastDiscard = discardNow;
+      selecting = false;
+      selection.set(new Set());
+    }
+  }
+
   $: {
     const list = [];
     const storeValue = $store;
     // Nothing is on offer to a seat that is being played for it.
-    if (myWind && !away && !waiting) {
+    // Nothing on offer once this seat has answered. A round takes one vote per
+    // seat and the server refuses a second, so an offer left on screen after the
+    // seat has voted is a button that quietly does nothing -- and the seat may
+    // have answered without the player: the countdown running out, or the short
+    // clock that starts when somebody else claims. The claim really is gone by
+    // then; the buttons should go with it rather than stay lit and inert.
+    if (myWind && !away && !waiting && !$currentVotes[myWind]) {
       // `tiles` is what has to be selected for the offer to appear; `meld` is
       // what the action actually consumes. They come apart when you hold three
       // copies: the server melds the first two matching tiles itself, so which
