@@ -5,7 +5,6 @@ const DRAGONS = ["Chun", "Hatsu", "Haku"];
 const SUITS = ["Pin", "Sou", "Man"];
 
 const NEXT_WIND = { Ton: "Nan", Nan: "Shaa", Shaa: "Pei", Pei: "Ton" };
-const PREV_WIND = { Nan: "Ton", Shaa: "Nan", Pei: "Shaa", Ton: "Pei" };
 
 const TURN_ORDER = ["Ton", "Nan", "Shaa", "Pei"];
 
@@ -23,10 +22,21 @@ const TURN_ORDER = ["Ton", "Nan", "Shaa", "Pei"];
 // that is not subtle: 黄庄 hands the default win to the newcomer and charges
 // every real player two for it, and the dealer's own doubling goes to a seat
 // that never appears in the payment loop, so it vanishes.
+// Seats no longer rotate every hand; the deal is a marker that moves round the
+// table instead (see `nextGame`). `schema.dealer` is that marker. Read from it
+// when it is set, skipping any seat that has since emptied or is only reserved
+// mid-hand, and fall back to the first occupied seat in turn order when it is
+// not -- which is the very first hand, and every scoring path that never sets a
+// dealer. Starting the scan at Ton with no marker reproduces the old
+// first-occupied answer exactly, so existing scoring keeps working unchanged.
 export function dealerSeat(schema) {
-  return TURN_ORDER.find(
-    (position) => schema[position] && !schema[position].waiting,
-  );
+  const from = schema.dealer && NEXT_WIND[schema.dealer] ? schema.dealer : TURN_ORDER[0];
+  let cur = from;
+  for (let i = 0; i < WINDS.length; i++) {
+    if (schema[cur] && !schema[cur].waiting) return cur;
+    cur = NEXT_WIND[cur];
+  }
+  return undefined;
 }
 
 // The tail of the wall nobody draws from in normal play -- it is what a kong
@@ -214,45 +224,68 @@ export default class Schema {
     return schema;
   }
 
+  // `initial` is kept for call-signature compatibility but is no longer needed:
+  // laps are counted directly on `dealerRotations` rather than by watching for
+  // the deal to come back round to the session's first dealer.
   static nextGame(previous, initial) {
     const basis = {
       name: previous.name,
       wind: previous.wind,
       scores: previous.scores || {},
-      // Seats rotate between games, but whoever runs the table stays the host.
+      // Whoever runs the table stays the host.
       host: previous.host,
+      dealer: previous.dealer,
+      dealerRotations: previous.dealerRotations || 0,
     };
-    // Dealer keeps the deal when they win -- compare against the actual dealer
-    // seat, which is not necessarily Ton now that seats are chosen freely.
-    if (previous.completed && previous.turn === dealerSeat(previous)) {
-      for (const position of WINDS) {
-        if (previous[position]) {
-          basis[position] = player(previous[position].name);
-        }
-      }
-    } else {
-      for (const position of WINDS) {
-        if (previous[position]) {
-          let newPosition = position;
-          do {
-            newPosition = PREV_WIND[newPosition];
-          } while (!previous[newPosition]);
-          basis[newPosition] = player(previous[position].name);
-        }
-      }
-      // After each position has been played by a player, change the prevailing
-      // wind and continue
-      const nextDealer = dealerSeat(basis);
-      const firstDealer = dealerSeat(initial);
-      if (
-        nextDealer && firstDealer &&
-        basis[nextDealer].name === initial[firstDealer].name
-      ) {
-        // Technically if we have reached Ton again, then the game should be done..?
-        // I don't think that really matters to us though.
-        basis.wind = NEXT_WIND[basis.wind];
-      }
+    // Seats stay put from one hand to the next -- rebuild each occupied chair
+    // with the same player. What moves is the deal marker below. (Reserved
+    // mid-hand seats are rebuilt too; `player()` clears the `waiting` flag, so
+    // they are dealt in for this hand.)
+    for (const position of WINDS) {
+      if (previous[position]) basis[position] = player(previous[position].name);
     }
+
+    const prevDealer = dealerSeat(previous);
+
+    // 连庄: the dealer keeps the deal after winning (and after a 黄庄 default
+    // win, which also leaves `turn` on the dealer). The marker does not move and
+    // the lap clock does not tick -- the hand is replayed from the same chair.
+    if (previous.completed && previous.turn === prevDealer) {
+      basis.dealer = prevDealer;
+      return new Schema(basis);
+    }
+
+    // Otherwise the deal passes to the next occupied seat round the table, and
+    // that is one more hand on the lap clock.
+    let nextDealer = NEXT_WIND[prevDealer];
+    for (let i = 0; i < WINDS.length && !basis[nextDealer]; i++) {
+      nextDealer = NEXT_WIND[nextDealer];
+    }
+    basis.dealer = nextDealer;
+    basis.dealerRotations += 1;
+
+    const seats = WINDS.filter((position) => basis[position]);
+    const lap = seats.length || 1;
+
+    // One full lap -- the deal has sat at every chair once -- turns the
+    // prevailing wind over, the way it always has.
+    if (basis.dealerRotations % lap === 0) basis.wind = NEXT_WIND[basis.wind];
+
+    // Reshuffling seats every hand was too churny; do it once every two full
+    // laps instead, then reset the clock so the next reshuffle is two laps off
+    // again. Seat *positions* are kept; only who sits in them is shuffled.
+    if (basis.dealerRotations % (2 * lap) === 0) {
+      const names = seats.map((position) => basis[position].name);
+      for (let i = names.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [names[i], names[j]] = [names[j], names[i]];
+      }
+      seats.forEach((position, i) => {
+        basis[position] = player(names[i]);
+      });
+      basis.dealerRotations = 0;
+    }
+
     return new Schema(basis);
   }
 
@@ -446,6 +479,11 @@ export default class Schema {
     this.wind = basis.wind || "Ton";
     this.turn = basis.turn || "Ton";
     this.previousTurn = basis.previousTurn || "Ton";
+    // Which seat holds the deal, and how many hands the marker has moved since
+    // the seats were last shuffled. Both ride along so a reloading client and
+    // the next hand agree on where the deal sits and when the table reshuffles.
+    this.dealer = basis.dealer;
+    this.dealerRotations = basis.dealerRotations || 0;
     this.started = basis.started || false;
     this.completed = basis.completed || false;
     this.roll = basis.roll;
@@ -510,7 +548,21 @@ export default class Schema {
     ];
 
     let [wall, stack] = this.nextDraw();
-    const winds = TURN_ORDER.filter((position) => this[position]);
+    // Deal from the dealer round the table, so the deal marker `nextGame` moved
+    // is who plays first this hand. With no marker yet -- the very first hand --
+    // `dealerSeat` returns the first occupied seat, the same seat the old
+    // TURN_ORDER filter began at. Record it so scoring and the next hand read
+    // the same dealer.
+    const dealer = dealerSeat(this) || TURN_ORDER.find((position) => this[position]);
+    this.dealer = dealer;
+    const winds = [];
+    if (dealer) {
+      let seat = dealer;
+      do {
+        if (this[seat]) winds.push(seat);
+        seat = NEXT_WIND[seat];
+      } while (seat !== dealer);
+    }
     // The 14th tile goes to winds[0], so the turn must point there too. Without
     // this, `turn` keeps its "Ton" default -- and if nobody took the Ton seat it
     // names an empty seat, so no client ever has `myTurn` and the game freezes
@@ -700,7 +752,7 @@ export default class Schema {
   // 黄庄. Nobody got out, so the dealer takes a default win and every other seat
   // pays them a flat WASH_OUT_POINTS -- no hand bonuses, no doublings, no cap.
   // Leaving `turn` on the dealer is also what keeps the deal with them, since
-  // `nextGame` rotates the seats unless the dealer took the round.
+  // `nextGame` reads `turn === dealer` as a 连庄 and holds the deal marker still.
   washOut() {
     const position = dealerSeat(this);
     this.completed = true;
@@ -1203,6 +1255,17 @@ export default class Schema {
       const noWildSchema = { ...this, wildcard: null };
       return Schema.winningHand(noWildSchema, restored);
     })();
+    // 四癞子 -- the winning hand holds all four copies of the wildcard, wherever
+    // they ended up: in hand, folded into a meld, or set aside by 亮.
+    const isFourWildcards = (() => {
+      if (!this.wildcard) return false;
+      const held = [
+        ...winner.up,
+        ...winner.down.flat(),
+        ...(winner.exposedWildcards || []),
+      ].filter((t) => typeof t === "number");
+      return held.filter((t) => eq(this.tiles[t], this.wildcard)).length >= 4;
+    })();
     const kongCount = winner.down.filter((meld) => meld.length >= 5).length;
     const pairsFourOfAKind = (() => {
       if (!isAllPairs) return 0;
@@ -1234,6 +1297,10 @@ export default class Schema {
       if (hasNoWildcard) score *= 2;
       for (let i = 0; i < kongCount + loserKongCount; i++) score *= 2;
       for (let i = 0; i < pairsFourOfAKind; i++) score *= 2;
+      // 四癞子 is added on top of the finished score rather than folded into the
+      // doublings above. The 30-point cap in updateScores still applies to the
+      // total, so a big hand does not escape it by holding four wildcards.
+      if (isFourWildcards) score += 10;
       return score;
     }
 
@@ -1258,6 +1325,9 @@ export default class Schema {
     for (let i = 0; i < kongCount; i++) lines.push({ label: "杠", value: "x2" });
     for (let i = 0; i < pairsFourOfAKind; i++) lines.push({ label: "豪华", value: "x2" });
     if (hasNoWildcard) lines.push({ label: "无癞子", value: "x2" });
+    // Last, so the itemised breakdown reads in the order it is scored: this +10
+    // lands on top of the doublings above, not inside them.
+    if (isFourWildcards) lines.push({ label: "四癞子", value: "+10" });
 
     return { isSelfDraw, calcLoserScore, lines };
   }

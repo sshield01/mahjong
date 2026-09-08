@@ -58,9 +58,12 @@
 <style>
   .tile {
     position: fixed;
-    top: clamp(4px, 1vh, 8px);
+    /* Centred on the table rather than tucked at the top edge, so the tile in
+       play sits where the eye already is -- the middle of the board. `translate`
+       on both axes keeps it centred as it grows when claimable. */
+    top: 50%;
     left: 50%;
-    transform: translateX(-50%);
+    transform: translate(-50%, -50%);
     width: clamp(14px, 2.5vh, 3vh);
     height: clamp(21px, 3.75vh, 4.5vh);
     border-radius: 0.3vh;

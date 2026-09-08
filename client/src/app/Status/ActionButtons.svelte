@@ -6,7 +6,6 @@
 
   const {
     currentVotes,
-    selection,
     selectionSets,
     socket,
     store,
@@ -15,12 +14,24 @@
     confirm,
   } = context();
 
+  // Every claim the discard offers, each as its own button, so a player can press
+  // 碰/吃/杠/胡 straight from the palette. This used to be filtered down to the one
+  // offer whose tiles were already selected, so the buttons stayed hidden until
+  // you picked the tiles out of your hand (or pressed 想想 first). 想想 keeps its
+  // value -- it stops the clock so you can weigh the options -- but it is no
+  // longer the only way to reach the action.
   let actions = []
-  $: actions = $selectionSets
-    .filter(selectionSet => {
-      return selectionSet.tiles.every(tile => $selection.has(tile)) &&
-        selectionSet.tiles.length === $selection.size;
-    });
+  $: actions = $selectionSets;
+
+  // When one label is on offer more than once -- typically several 吃 built from
+  // different tiles of a run -- the bare character cannot tell them apart, so
+  // those buttons also show the tiles they would consume, the way 杠 already does.
+  $: labelCounts = actions.reduce((counts, action) => {
+    counts[action.label] = (counts[action.label] || 0) + 1;
+    return counts;
+  }, {});
+  $: showTiles = (action) =>
+    labelCounts[action.label] > 1 && action.tiles && action.tiles.length > 0;
 
   // This component is only mounted for a seated player, but guard `myWind`
   // being falsy anyway (e.g. a spectator) rather than throwing on $store[myWind].
@@ -154,7 +165,7 @@
     
     {#each actions as action}
       <button class="action" class:win={action.win} on:click={action.handler}>
-        {action.label}
+        {action.label}{#if showTiles(action)} (<span class="offer-tiles">{#each action.tiles as tile}<TextTile {tile} />{/each}</span>){/if}
       </button>
     {/each}
 
@@ -237,6 +248,12 @@
   .action:hover { background-color: #ffffff; }
   .action:active { transform: translateY(1px); }
   .action:focus-visible { outline: 2px solid var(--green); outline-offset: 2px; }
+
+  /* The tile faces on a disambiguated 吃, kept just apart from each other. */
+  .offer-tiles {
+    display: inline-flex;
+    gap: 0.15em;
+  }
 
   /* 胡 -- the win -- is the one action worth singling out of an otherwise even
      column. It wears the same confirm-green as 再来一局 and the primary dialog

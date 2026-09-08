@@ -1,6 +1,6 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
-import Schema, { player, dealerSeat } from "../lib/schema.js";
+import Schema, { player, dealerSeat, WINDS } from "../lib/schema.js";
 import { allWindTiles } from "./helpers.js";
 
 function seat(schema, position, name) {
@@ -207,6 +207,74 @@ describe("next game", () => {
 
     const next = Schema.nextGame(first, first);
     assert.equal(next.Ton.name, "Alice", "seats do not rotate when the dealer wins");
+  });
+
+  // Seats no longer rotate every hand -- players keep their chairs and the deal
+  // is a marker that moves round the table. A four-seat table, dealt from Ton.
+  function fullTable() {
+    const schema = new Schema({ name: "r" });
+    seat(schema, "Ton", "Alice");
+    seat(schema, "Nan", "Bob");
+    seat(schema, "Shaa", "Cara");
+    seat(schema, "Pei", "Dora");
+    return schema;
+  }
+
+  // Finish a hand as a non-dealer win, so the deal is due to pass on.
+  function nonDealerWin(schema) {
+    schema.started = true;
+    schema.completed = true;
+    const dealer = dealerSeat(schema);
+    schema.turn = WINDS.find((position) => schema[position] && position !== dealer);
+    return schema;
+  }
+
+  test("a non-dealer win passes the deal on but leaves the seats put", () => {
+    const first = nonDealerWin(fullTable());
+
+    const next = Schema.nextGame(first, first);
+    assert.equal(dealerSeat(next), "Nan", "the deal moves one seat round the table");
+    assert.equal(next.Ton.name, "Alice", "every player keeps the chair they sat in");
+    assert.equal(next.Nan.name, "Bob");
+    assert.equal(next.Shaa.name, "Cara");
+    assert.equal(next.Pei.name, "Dora");
+  });
+
+  test("the prevailing wind turns over after a full lap of the deal", () => {
+    let schema = fullTable();
+    assert.equal(schema.wind, "Ton");
+
+    // Four non-dealer hands walk the deal Ton -> Nan -> Shaa -> Pei -> Ton.
+    for (let hand = 0; hand < 3; hand++) {
+      schema = Schema.nextGame(nonDealerWin(schema), schema);
+      assert.equal(schema.wind, "Ton", "the wind holds until the lap is complete");
+    }
+    schema = Schema.nextGame(nonDealerWin(schema), schema);
+    assert.equal(schema.wind, "Nan", "one full lap turns the prevailing wind over");
+    assert.equal(dealerSeat(schema), "Ton", "and the deal is back where it started");
+  });
+
+  test("the seats reshuffle after two full laps, keeping the same players", () => {
+    let schema = fullTable();
+
+    // Seven passes: the deal has gone round not-quite twice, so nothing has
+    // reshuffled yet and the chairs are still in their original order.
+    for (let hand = 0; hand < 7; hand++) {
+      schema = Schema.nextGame(nonDealerWin(schema), schema);
+    }
+    assert.equal(schema.Ton.name, "Alice", "no reshuffle before two full laps are up");
+    assert.equal(schema.Nan.name, "Bob");
+    assert.equal(schema.Shaa.name, "Cara");
+    assert.equal(schema.Pei.name, "Dora");
+
+    // The eighth pass completes the second lap and reshuffles the occupants.
+    schema = Schema.nextGame(nonDealerWin(schema), schema);
+    assert.equal(schema.dealerRotations, 0, "the lap clock resets at the reshuffle");
+    assert.deepEqual(
+      WINDS.map((position) => schema[position].name).sort(),
+      ["Alice", "Bob", "Cara", "Dora"],
+      "the same four players are still at the table, only their chairs may have moved",
+    );
   });
 });
 
