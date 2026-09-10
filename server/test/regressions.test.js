@@ -810,6 +810,63 @@ describe("scoring", () => {
       }
     });
 
+    // 全求人 means the hand was built out of other people's tiles, with nothing
+    // but the eyes held back. It was decided by `down.length >= 4`, and `down`
+    // holds more than melds claimed from others: `eyes()` puts the claimed pair
+    // there, and a concealed kong sits there too though nobody supplied it.
+    describe("全求人", () => {
+      // Three melds claimed, the pair claimed as the eyes -- and a triplet the
+      // player made alone still in hand. Four entries in `down`, and not 全求人.
+      function claimedThreeAndOneOwn() {
+        const { schema, seat } = table();
+        seat("Ton", "A", { up: [T("Sou", 5)] });
+        seat("Nan", "B", {
+          up: [T("Man", 9), T("Man", 9), T("Man", 9), T("Sou", 5)],
+          down: [
+            [T("Pin", 2), T("Pin", 2), T("Pin", 2)],
+            [T("Pin", 5), T("Pin", 5), T("Pin", 5)],
+            [T("Pin", 8), T("Pin", 8), T("Pin", 8)],
+          ],
+        });
+        schema.turn = "Ton";
+        schema.discard("A", schema.Ton.up[0]);
+        schema.eyes("Nan", false);
+        return schema;
+      }
+
+      test("a triplet made alone is not everybody else's doing", () => {
+        const schema = claimedThreeAndOneOwn();
+        assert.equal(schema.Nan.down.length, 4, "four entries in down, as it happens");
+        const { lines } = schema.updateScores("Nan");
+        assert.ok(
+          !lines.some((line) => line.label === "全求人"),
+          "a concealed triplet in hand disqualifies it",
+        );
+      });
+
+      test("but a hand holding only its eyes is", () => {
+        const { schema, seat } = table();
+        seat("Ton", "A", { up: [T("Sou", 5)] });
+        // Four melds down leaves room for nothing but the half-pair: twelve tiles
+        // melded, one waiting, and the discard makes fourteen.
+        seat("Nan", "B", {
+          up: [T("Sou", 5)],
+          down: [
+            [T("Pin", 2), T("Pin", 2), T("Pin", 2)],
+            [T("Pin", 5), T("Pin", 5), T("Pin", 5)],
+            [T("Pin", 8), T("Pin", 8), T("Pin", 8)],
+            [T("Sou", 2), T("Sou", 2), T("Sou", 2)],
+          ],
+        });
+        schema.turn = "Ton";
+        schema.discard("A", schema.Ton.up[0]);
+        schema.eyes("Nan", false);
+
+        const { lines } = schema.updateScores("Nan");
+        assert.ok(lines.some((line) => line.label === "全求人"));
+      });
+    });
+
     test("names the hand's bonuses", () => {
       const schema = sevenPairsWin();
       const { lines } = schema.updateScores("Ton");

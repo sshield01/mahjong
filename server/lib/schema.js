@@ -1215,7 +1215,22 @@ export default class Schema {
     })();
 
     const isAllClear = winner.down.length === 0 && isSelfDraw;
-    const isAllFromOthers = !isSelfDraw && winner.down.length >= 4;
+    // 全求人: the hand was built entirely out of other people's tiles, with
+    // nothing but the eyes held back.
+    //
+    // Counting `down.length >= 4` did not say that. `down` holds more than melds
+    // claimed from others: `eyes()` records the claimed pair there as a two-tile
+    // group, and a concealed kong sits there too though nobody else supplied it.
+    // Three claimed melds plus a claimed pair came to four and scored 全求人 with
+    // a self-made triplet still sitting in the hand.
+    //
+    // Ask the hand instead. Everything taken from somebody is in `down`, so if
+    // nothing but the eyes remains in `up`, nothing was built alone -- and that
+    // holds however the melds are shaped, pair in `down` or not.
+    const isAllFromOthers =
+      !isSelfDraw &&
+      winner.up.length <= 2 &&
+      winner.down.every((meld) => !meld.includes("concealed"));
     const isAllPairs = (() => {
       const allIndices = [...winner.up, ...winner.down.flat().filter((t) => typeof t === "number")];
       if (allIndices.length !== 14) return false;
