@@ -196,13 +196,42 @@
     1,
     TOP_VIEW_SCALE + (1 - TOP_VIEW_SCALE) * (tableAngle / RESTING_ANGLE),
   );
+  // Setting the angle rather than nudging it: `adjustment` is always whatever
+  // produces the angle on screen. Adding to it directly let it hold values the
+  // clamp then hid -- a scroll would appear to do nothing while the excess was
+  // silently unwound. Not reachable with the guards as they stood, but the two
+  // input paths below clamped against different things, and this removes the
+  // possibility rather than relying on them agreeing.
+  function setAngle(next) {
+    adjustment = Math.min(90, Math.max(0, next)) - RESTING_ANGLE;
+  }
+
   const SPEED = 3;
+  // A wheel notch is around 100 deltaY; a trackpad sends a stream of much smaller
+  // ones. Treating every event as a fixed step turned the trackpad into a bolt --
+  // and momentum scrolling keeps those events coming for a second or so after
+  // your fingers leave, which is the angle carrying on by itself. Scale by the
+  // gesture and cap it, so a flick is fast but finite and a nudge is a nudge.
+  const MAX_STEP = 6;
   function scroll(event) {
     if (state !== PLAY) return;
-    const direction = event.deltaY / Math.abs(event.deltaY);
-    if (tableAngle + direction * SPEED <= 90 && tableAngle + direction * SPEED >= 0) {
-      adjustment += direction * SPEED;
+    if (!event.deltaY) return; // 0, or NaN from a device that reports neither way
+    // A wheel over something that scrolls belongs to that thing. The end-of-hand
+    // panel and the room list both scroll, and both sit over the table -- reading
+    // down either of them used to rotate the board behind it.
+    if (overScrollable(event.target)) return;
+
+    const step = (event.deltaY / 100) * SPEED;
+    setAngle(tableAngle + Math.max(-MAX_STEP, Math.min(MAX_STEP, step)));
+  }
+
+  function overScrollable(node) {
+    for (let el = node; el instanceof Element; el = el.parentElement) {
+      if (el.scrollHeight <= el.clientHeight) continue;
+      const overflowY = getComputedStyle(el).overflowY;
+      if (overflowY === 'auto' || overflowY === 'scroll') return true;
     }
+    return false;
   }
 
   // A double click is always "get me out of where I am": from the resting angle
@@ -225,11 +254,10 @@
     if (state !== PLAY || touchStartY === null) return;
     if (event.touches.length === 2) {
       const currentY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
-      const delta = (currentY - touchStartY) * 0.3;
-      const newAngle = RESTING_ANGLE + adjustment + delta * 0.5;
-      if (newAngle >= 0 && newAngle <= 90) {
-        adjustment += delta * 0.5;
-      }
+      // Clamped rather than refused: dragging past the limit used to discard the
+      // whole move, so a two-finger sweep that overshot stopped dead instead of
+      // resting against the end of its travel.
+      setAngle(tableAngle + (currentY - touchStartY) * 0.3 * 0.5);
       touchStartY = currentY;
     }
   }
